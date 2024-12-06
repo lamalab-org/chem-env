@@ -2,14 +2,8 @@
 import backoff
 import safe
 import deepsmiles
-import pubchempy as pcp
-import requests
 import selfies
 from rdkit import Chem
-from STOUT import (
-    translate_forward,
-    translate_reverse
-)
 from urllib.parse import (
     quote,
     unquote,
@@ -20,13 +14,33 @@ import aiohttp
 import asyncio
 
 class Name2Smiles:
-    """Convert chemical names to SMILES notation using various APIs."""
+    """Convert chemical names to SMILES notation using multiple chemical APIs.
+    
+    This class attempts to convert chemical compound names to SMILES notation
+    by querying multiple chemical databases APIs in parallel until a valid 
+    result is found.
+    
+    Args:
+        name: The chemical compound name to convert to SMILES notation.
+
+    Raises:
+        ValueError: If the name cannot be URL-encoded or contains invalid characters.
+    """
 
     def __init__(self, name: str):
-        """Initialize with chemical name.
+        """Initialize converter with chemical name.
         
         Args:
-            name: Chemical compound name
+            name: Chemical compound name to convert
+            
+        Raises:
+            ValueError: If name cannot be URL-encoded
+
+        Example:
+        # Basic usage with IUPAC name
+        >>> converter = Name2Smiles("2-propanone")
+        >>> await converter.get_smiles()
+        'CC(=O)C'
         """
         try:
             self.name = quote(name)
@@ -43,7 +57,17 @@ class Name2Smiles:
     
     @backoff.on_exception(backoff.expo, (aiohttp.ClientError, asyncio.TimeoutError), max_time=10, logger=logger)
     async def opsin(self) -> Optional[str]:
-        """Query OPSIN API for SMILES."""
+        """
+        Queries the OPSIN (Open Parser for Systematic IUPAC Nomenclature) API
+        to convert chemical name to SMILES.
+        
+        Returns:
+            str: SMILES notation if successful, None otherwise
+            
+        Raises:
+            aiohttp.ClientError: On API connection errors
+            asyncio.TimeoutError: If request times out
+        """
         url = f"https://opsin.ch.cam.ac.uk/opsin/{self.name}"
         
         async with aiohttp.ClientSession() as session:
@@ -60,7 +84,17 @@ class Name2Smiles:
 
     @backoff.on_exception(backoff.expo, (aiohttp.ClientError, asyncio.TimeoutError), max_time=10, logger=logger)
     async def cactus(self) -> Optional[str]:
-        """Query CACTUS API for SMILES."""
+        """
+        Queries the NCI CACTUS Chemical Identifier Resolver API
+        to convert chemical name to SMILES.
+        
+        Returns:
+            str: SMILES notation if successful, None otherwise
+            
+        Raises:
+            aiohttp.ClientError: On API connection errors
+            asyncio.TimeoutError: If request times out
+        """
         url = f"https://cactus.nci.nih.gov/chemical/structure/{self.name}/smiles"
         
         async with aiohttp.ClientSession() as session:
@@ -76,7 +110,17 @@ class Name2Smiles:
 
     @backoff.on_exception(backoff.expo, (aiohttp.ClientError, asyncio.TimeoutError), max_time=10, logger=logger)
     async def pubchem(self) -> Optional[str]:
-        """Query PubChem API for SMILES."""
+        """
+        Queries the PubChem REST API to convert chemical name to 
+        isomeric SMILES notation.
+        
+        Returns:
+            str: SMILES notation if successful, None otherwise
+            
+        Raises:
+            aiohttp.ClientError: On API connection errors
+            asyncio.TimeoutError: If request times out
+        """
         url = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/{self.name}/property/IsomericSMILES/JSON"
         
         async with aiohttp.ClientSession() as session:
@@ -89,11 +133,21 @@ class Name2Smiles:
                     return None
             except Exception as e:
                 logger.error(f"PubChem API error: {e}")
+                print(e)
                 return None
 
     @backoff.on_exception(backoff.expo, (aiohttp.ClientError, asyncio.TimeoutError), max_time=10, logger=logger)
     async def unknown(self) -> Optional[str]:
-        """Query unknown API for SMILES."""
+        """
+        Queries the Unknown API to convert chemical name to SMILES.
+
+        Returns:
+            str: SMILES notation if successful, None otherwise
+        
+        Raises:
+            aiohttp.ClientError: On API connection errors
+            asyncio.TimeoutError: If request times out
+        """ 
         url = f"http://46.4.119.202:8082/?name=%7B{self.name}%7D&what=smiles"
         
         async with aiohttp.ClientSession() as session:
@@ -111,12 +165,22 @@ class Name2Smiles:
     
 
     async def get_smiles(self) -> Optional[str]:
-        """Try all APIs in parallel until we get a result."""
+        """Query all APIs in parallel until a valid SMILES is found.
+        
+        Attempts to convert name to SMILES using multiple APIs concurrently,
+        returning the first successful result.
+        
+        Returns:
+            str: First valid SMILES notation found
+            
+        Raises:
+            ValueError: If no API returns a valid SMILES notation
+        """
         tasks = [
             self.opsin(),
             self.cactus(),
             self.pubchem(),
-            self.unknown()
+            self.unknown(),
         ]
         
         for result in asyncio.as_completed(tasks):
@@ -125,61 +189,144 @@ class Name2Smiles:
                 if smiles:
                     return smiles
             except Exception as e:
-                self.logger.error(f"Error in get_smiles: {e}")
+                logger.error(f"Error in get_smiles: {e}")
                 continue
         
-        return translate_reverse(unquote(self.name))
-    
-CACTUS = "https://cactus.nci.nih.gov/chemical/structure/{0}/{1}"
+        raise ValueError(f"Could not find SMILES for {unquote(self.name)}")
 
 
-@backoff.on_exception(backoff.expo, requests.exceptions.RequestException, max_time=10)
-def cactus_request_w_backoff(smiles, rep="iupac_name"):
-    url = CACTUS.format(smiles, rep)
-    response = requests.get(url, allow_redirects=True, timeout=10)
-    response.raise_for_status()
-    name = response.text
-    if "html" in name:
-        return None
-    return name
-
-
-def smiles_to_iupac_name(smiles: str) -> str:
-    """Use the chemical name resolver https://cactus.nci.nih.gov/chemical/structure.
-    If this does not work, use pubchem.
+class Smiles2Name:
     """
-    try:
-        name = cactus_request_w_backoff(smiles, rep="iupac_name")
-        if name is None:
-            raise Exception
-        return name
-    except Exception:
-        try:
-            compound = pcp.get_compounds(smiles, "smiles")
-            return compound[0].iupac_name
-        except Exception:
-            return None
+    Convert SMILES chemical notation to IUPAC chemical names.
 
-def smiles2iupac(smiles: str) -> str:
-    """
-    Convert a SMILES string to an IUPAC name.
+    This class provides methods to query different chemical databases (PubChem, CACTUS)
+    to obtain IUPAC names for chemical compounds using their SMILES representation.
 
     Args:
-        smiles: The SMILES string to convert.
+        smiles (str): The SMILES string representing the chemical compound.
 
-    Returns:
-        The IUPAC name of the molecule.
+    Raises:
+        ValueError: If the SMILES string is invalid or cannot be encoded.
     """
-    iupac_name = smiles_to_iupac_name(smiles)
-    if iupac_name is None:
-        return translate_forward(smiles)
-    else:
-        return iupac_name
+
+    def __init__(self, smiles):
+        """Initialize Name2Smiles converter with a chemical compound name.
+
+        Takes a chemical compound name and prepares it for API queries by URL-encoding.
+        Sets default timeout for API requests to 10 seconds.
+    
+        Args:
+            name (str): Chemical compound name to convert to SMILES notation.
+                Should be a valid IUPAC or common chemical name.
+    
+        Raises:
+            ValueError: If the name cannot be URL-encoded or contains invalid characters.
+    
+        Example:
+            >>> converter = Name2Smiles("ethanol")
+            >>> await converter.get_smiles()
+            'CCO'
+        """
+        mol = Chem.MolFromSmiles(smiles)
+        if mol is None:
+            raise ValueError(f"Invalid SMILES: {smiles}")
+
+        try:
+            self.smiles = quote(smiles)
+        except Exception as e:
+            logger.error(f"Error encoding name: {e}")
+            raise ValueError(f"Invalid chemical name: {smiles}")
+        
+        self.timeout = 10  # seconds
+
+    backoff.on_exception(backoff.expo, (aiohttp.ClientError, asyncio.TimeoutError), max_time=10, logger=logger)
+    async def pubchem(self) -> Optional[str]:
+        """
+        Query PubChem API to get IUPAC name from SMILES.
+
+        Returns:
+            Optional[str]: IUPAC name if found, None if the query failed.
+
+        Raises:
+            aiohttp.ClientError: If the API request fails.
+            asyncio.TimeoutError: If the request times out.
+        """
+        url = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/smiles/{self.smiles}/property/IUPACName/TXT"
+        async with aiohttp.ClientSession() as session:
+            try:
+                async with session.get(url, timeout=self.timeout) as response:
+                    if response.status == 200:
+                        return await response.text()
+                    logger.warning(f"CACTUS API failed with status {response.status}")
+                    return None
+            except Exception as e:
+                logger.error(f"CACTUS API error: {e}")
+                return None
+
+    backoff.on_exception(backoff.expo, (aiohttp.ClientError, asyncio.TimeoutError), max_time=10, logger=logger)
+    async def cactus(self) -> Optional[str]:
+        """
+        Query CACTUS API to get IUPAC name from SMILES.
+
+        Returns:
+            Optional[str]: IUPAC name if found, None if the query failed.
+
+        Raises:
+            aiohttp.ClientError: If the API request fails.
+            asyncio.TimeoutError: If the request times out.
+        """
+        url = f"https://cactus.nci.nih.gov/chemical/structure/{self.smiles}/iupac_name"
+        
+        async with aiohttp.ClientSession() as session:
+            try:
+                async with session.get(url, timeout=self.timeout) as response:
+                    if response.status == 200:
+                        return await response.text()
+                    logger.warning(f"CACTUS API failed with status {response.status}")
+                    return None
+            except Exception as e:
+                logger.error(f"CACTUS API error: {e}")
+                return None
+                
+    async def get_name(self) -> Optional[str]:
+        """
+        Query multiple chemical APIs in parallel to get IUPAC name.
+
+        Attempts to retrieve the IUPAC name by querying multiple chemical databases
+        concurrently (CACTUS and PubChem). Returns the first successful result.
+
+        Returns:
+            str: The IUPAC name of the chemical compound.
+
+        Raises:
+            ValueError: If no name could be found in any of the chemical databases.
+        """
+        tasks = [
+            self.cactus(),
+            self.pubchem(),
+        ]
+        
+        for result in asyncio.as_completed(tasks):
+            try:
+                name = await result
+                if name:
+                    return name
+            except Exception as e:
+                logger.error(f"Error in get_name: {e}")
+                continue
+        
+        raise ValueError(f"Could not find name for {unquote(self.smiles)}")
 
 
 def smiles_to_selfies(smiles: str) -> str:
     """
-    Takes a SMILES and return the selfies encoding.
+    Takes a SMILES and return the SELFIES encoding.
+
+    Args:
+        smiles: SMILES string
+    
+    Returns:
+        str: SELFIES of the input SMILES
     """
 
     return selfies.encoder(smiles)
@@ -188,6 +335,12 @@ def smiles_to_selfies(smiles: str) -> str:
 def smiles_to_deepsmiles(smiles: str) -> str:
     """
     Takes a SMILES and return the DeepSMILES encoding.
+
+    Args:
+        smiles: SMILES string
+    
+    Returns:
+        str: DeepSMILES of the input SMILES
     """
     converter = deepsmiles.Converter(rings=True, branches=True)
     return converter.encode(smiles)
@@ -196,6 +349,12 @@ def smiles_to_deepsmiles(smiles: str) -> str:
 def smiles_to_canoncial(smiles: str) -> str:
     """
     Takes a SMILES and return the canoncial SMILES.
+
+    Args:
+        smiles: SMILES string
+    
+    Returns:
+        str: Canoncial SMILES of the input SMILES
     """
     mol = Chem.MolFromSmiles(smiles)
     return Chem.MolToSmiles(mol)
@@ -204,6 +363,12 @@ def smiles_to_canoncial(smiles: str) -> str:
 def smiles_to_inchi(smiles: str) -> str:
     """
     Takes a SMILES and return the InChI.
+
+    Args:
+        smiles: SMILES string
+    
+    Returns:
+        str: InChI of the input SMILES
     """
     mol = Chem.MolFromSmiles(smiles)
     return Chem.MolToInchi(mol)
@@ -211,6 +376,12 @@ def smiles_to_inchi(smiles: str) -> str:
 
 def smiles_to_safe(smiles: str) -> str:
     """
-    Takes a SMILES and return the SAFE.
+    Takes a SMILES and return the SAFE (https://github.com/datamol-io/safe).
+
+    Args:
+        smiles: SMILES string
+    
+    Returns:
+        str: SAFE of the input SMILES
     """
     return safe.encode(smiles, seed=42, canonical=True, randomize=False)

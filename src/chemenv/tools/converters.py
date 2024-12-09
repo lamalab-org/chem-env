@@ -1,4 +1,4 @@
-
+import os
 import backoff
 import safe
 import deepsmiles
@@ -12,14 +12,18 @@ from typing import Optional
 from loguru import logger
 import aiohttp
 import asyncio
+from dotenv import load_dotenv
+
+load_dotenv("../../.env", override=True)
+
 
 class Name2Smiles:
     """Convert chemical names to SMILES notation using multiple chemical APIs.
-    
+
     This class attempts to convert chemical compound names to SMILES notation
-    by querying multiple chemical databases APIs in parallel until a valid 
+    by querying multiple chemical databases APIs in parallel until a valid
     result is found.
-    
+
     Args:
         name: The chemical compound name to convert to SMILES notation.
 
@@ -29,10 +33,10 @@ class Name2Smiles:
 
     def __init__(self, name: str):
         """Initialize converter with chemical name.
-        
+
         Args:
             name: Chemical compound name to convert
-            
+
         Raises:
             ValueError: If name cannot be URL-encoded
 
@@ -47,25 +51,29 @@ class Name2Smiles:
         except Exception as e:
             logger.error(f"Error encoding name: {e}")
             raise ValueError(f"Invalid chemical name: {name}")
-        
+
         self.timeout = 10  # seconds
 
-    
-    @backoff.on_exception(backoff.expo, (aiohttp.ClientError, asyncio.TimeoutError), max_time=10, logger=logger)
-    async def opsin(self) -> Optional[str]:
+    @backoff.on_exception(
+        backoff.expo,
+        (aiohttp.ClientError, asyncio.TimeoutError),
+        max_time=10,
+        logger=logger,
+    )
+    async def opsin_api(self) -> Optional[str]:
         """
         Queries the OPSIN (Open Parser for Systematic IUPAC Nomenclature) API
         to convert chemical name to SMILES.
-        
+
         Returns:
             str: SMILES notation if successful, None otherwise
-            
+
         Raises:
             aiohttp.ClientError: On API connection errors
             asyncio.TimeoutError: If request times out
         """
         url = f"https://opsin.ch.cam.ac.uk/opsin/{self.name}"
-        
+
         async with aiohttp.ClientSession() as session:
             try:
                 async with session.get(url, timeout=self.timeout) as response:
@@ -78,21 +86,26 @@ class Name2Smiles:
                 logger.error(f"OPSIN API error: {e}")
                 return None
 
-    @backoff.on_exception(backoff.expo, (aiohttp.ClientError, asyncio.TimeoutError), max_time=10, logger=logger)
+    @backoff.on_exception(
+        backoff.expo,
+        (aiohttp.ClientError, asyncio.TimeoutError),
+        max_time=10,
+        logger=logger,
+    )
     async def cactus(self) -> Optional[str]:
         """
         Queries the NCI CACTUS Chemical Identifier Resolver API
         to convert chemical name to SMILES.
-        
+
         Returns:
             str: SMILES notation if successful, None otherwise
-            
+
         Raises:
             aiohttp.ClientError: On API connection errors
             asyncio.TimeoutError: If request times out
         """
         url = f"https://cactus.nci.nih.gov/chemical/structure/{self.name}/smiles"
-        
+
         async with aiohttp.ClientSession() as session:
             try:
                 async with session.get(url, timeout=self.timeout) as response:
@@ -104,21 +117,26 @@ class Name2Smiles:
                 logger.error(f"CACTUS API error: {e}")
                 return None
 
-    @backoff.on_exception(backoff.expo, (aiohttp.ClientError, asyncio.TimeoutError), max_time=10, logger=logger)
+    @backoff.on_exception(
+        backoff.expo,
+        (aiohttp.ClientError, asyncio.TimeoutError),
+        max_time=10,
+        logger=logger,
+    )
     async def pubchem(self) -> Optional[str]:
         """
-        Queries the PubChem REST API to convert chemical name to 
+        Queries the PubChem REST API to convert chemical name to
         isomeric SMILES notation.
-        
+
         Returns:
             str: SMILES notation if successful, None otherwise
-            
+
         Raises:
             aiohttp.ClientError: On API connection errors
             asyncio.TimeoutError: If request times out
         """
         url = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/{self.name}/property/IsomericSMILES/JSON"
-        
+
         async with aiohttp.ClientSession() as session:
             try:
                 async with session.get(url, timeout=self.timeout) as response:
@@ -132,53 +150,62 @@ class Name2Smiles:
                 print(e)
                 return None
 
-    @backoff.on_exception(backoff.expo, (aiohttp.ClientError, asyncio.TimeoutError), max_time=10, logger=logger)
+    @backoff.on_exception(
+        backoff.expo,
+        (aiohttp.ClientError, asyncio.TimeoutError),
+        max_time=10,
+        logger=logger,
+    )
     async def unknown(self) -> Optional[str]:
         """
         Queries the Unknown API to convert chemical name to SMILES.
 
         Returns:
             str: SMILES notation if successful, None otherwise
-        
+
         Raises:
             aiohttp.ClientError: On API connection errors
             asyncio.TimeoutError: If request times out
-        """ 
-        url = f"http://46.4.119.202:8082/?name=%7B{self.name}%7D&what=smiles"
-        
+        """
+        base_url = os.environ.get("PRIVATE_API_URL")
+        if not base_url:
+            logger.error("Unknown API URL not set")
+            return None
+
+        url = f"{base_url}name=%7B{self.name}%7D&what=smiles"
+
         async with aiohttp.ClientSession() as session:
             try:
                 async with session.get(url, timeout=self.timeout) as response:
                     if response.status == 200:
                         message_content = await response.text()
-                        message_text = message_content.split('Message:')[1].strip()
+                        message_text = message_content.split("Message:")[1].strip()
                         return message_text
                     logger.warning(f"Unknown API failed with status {response.status}")
                     return None
             except Exception as e:
                 logger.error(f"Unknown API error: {e}")
                 return None
-    
 
     async def get_smiles(self) -> Optional[str]:
         """Query all APIs in parallel until a valid SMILES is found.
-        
+
         Attempts to convert name to SMILES using multiple APIs concurrently,
         returning the first successful result.
-        
+
         Returns:
             str: First valid SMILES notation found
-            
+
         Raises:
             ValueError: If no API returns a valid SMILES notation
         """
         tasks = [
-            self.opsin(),
+            self.opsin_api(),
             self.cactus(),
             self.pubchem(),
             self.unknown(),
         ]
-        
+
         for result in asyncio.as_completed(tasks):
             try:
                 smiles = await result
@@ -187,7 +214,7 @@ class Name2Smiles:
             except Exception as e:
                 logger.error(f"Error in get_smiles: {e}")
                 continue
-        
+
         raise ValueError(f"Could not find SMILES for {unquote(self.name)}")
 
 
@@ -210,14 +237,14 @@ class Smiles2Name:
 
         Takes a chemical compound name and prepares it for API queries by URL-encoding.
         Sets default timeout for API requests to 10 seconds.
-    
+
         Args:
             name (str): Chemical compound name to convert to SMILES notation.
                 Should be a valid IUPAC or common chemical name.
-    
+
         Raises:
             ValueError: If the name cannot be URL-encoded or contains invalid characters.
-    
+
         Example:
             >>> converter = Name2Smiles("ethanol")
             >>> await converter.get_smiles()
@@ -232,10 +259,16 @@ class Smiles2Name:
         except Exception as e:
             logger.error(f"Error encoding name: {e}")
             raise ValueError(f"Invalid chemical name: {smiles}")
-        
+
         self.timeout = 10  # seconds
 
-    backoff.on_exception(backoff.expo, (aiohttp.ClientError, asyncio.TimeoutError), max_time=10, logger=logger)
+    backoff.on_exception(
+        backoff.expo,
+        (aiohttp.ClientError, asyncio.TimeoutError),
+        max_time=10,
+        logger=logger,
+    )
+
     async def pubchem(self) -> Optional[str]:
         """
         Query PubChem API to get IUPAC name from SMILES.
@@ -259,7 +292,13 @@ class Smiles2Name:
                 logger.error(f"CACTUS API error: {e}")
                 return None
 
-    backoff.on_exception(backoff.expo, (aiohttp.ClientError, asyncio.TimeoutError), max_time=10, logger=logger)
+    backoff.on_exception(
+        backoff.expo,
+        (aiohttp.ClientError, asyncio.TimeoutError),
+        max_time=10,
+        logger=logger,
+    )
+
     async def cactus(self) -> Optional[str]:
         """
         Query CACTUS API to get IUPAC name from SMILES.
@@ -272,7 +311,7 @@ class Smiles2Name:
             asyncio.TimeoutError: If the request times out.
         """
         url = f"https://cactus.nci.nih.gov/chemical/structure/{self.smiles}/iupac_name"
-        
+
         async with aiohttp.ClientSession() as session:
             try:
                 async with session.get(url, timeout=self.timeout) as response:
@@ -283,7 +322,7 @@ class Smiles2Name:
             except Exception as e:
                 logger.error(f"CACTUS API error: {e}")
                 return None
-                
+
     async def get_name(self) -> Optional[str]:
         """
         Query multiple chemical APIs in parallel to get IUPAC name.
@@ -301,7 +340,7 @@ class Smiles2Name:
             self.cactus(),
             self.pubchem(),
         ]
-        
+
         for result in asyncio.as_completed(tasks):
             try:
                 name = await result
@@ -310,7 +349,7 @@ class Smiles2Name:
             except Exception as e:
                 logger.error(f"Error in get_name: {e}")
                 continue
-        
+
         raise ValueError(f"Could not find name for {unquote(self.smiles)}")
 
 
@@ -320,7 +359,7 @@ def smiles_to_selfies(smiles: str) -> str:
 
     Args:
         smiles: SMILES string
-    
+
     Returns:
         str: SELFIES of the input SMILES
     """
@@ -334,7 +373,7 @@ def smiles_to_deepsmiles(smiles: str) -> str:
 
     Args:
         smiles: SMILES string
-    
+
     Returns:
         str: DeepSMILES of the input SMILES
     """
@@ -344,13 +383,13 @@ def smiles_to_deepsmiles(smiles: str) -> str:
 
 def smiles_to_canoncial(smiles: str) -> str:
     """
-    Takes a SMILES and return the canoncial SMILES.
+    Takes a SMILES and return the canonical SMILES.
 
     Args:
         smiles: SMILES string
-    
+
     Returns:
-        str: Canoncial SMILES of the input SMILES
+        str: Canonical SMILES of the input SMILES
     """
     mol = Chem.MolFromSmiles(smiles)
     return Chem.MolToSmiles(mol)
@@ -362,7 +401,7 @@ def smiles_to_inchi(smiles: str) -> str:
 
     Args:
         smiles: SMILES string
-    
+
     Returns:
         str: InChI of the input SMILES
     """
@@ -376,7 +415,7 @@ def smiles_to_safe(smiles: str) -> str:
 
     Args:
         smiles: SMILES string
-    
+
     Returns:
         str: SAFE of the input SMILES
     """

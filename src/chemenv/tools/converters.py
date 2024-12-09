@@ -50,10 +50,6 @@ class Name2Smiles:
         
         self.timeout = 10  # seconds
 
-    async def open_molecules(self) -> Optional[str]:
-        """Query Open Molecules API for SMILES."""
-        # Implementation pending API details
-        return None
     
     @backoff.on_exception(backoff.expo, (aiohttp.ClientError, asyncio.TimeoutError), max_time=10, logger=logger)
     async def opsin(self) -> Optional[str]:

@@ -76,10 +76,8 @@ class Name2Smiles:
                     if response.status == 200:
                         data = await response.json()
                         return data["smiles"]
-                    logger.warning(f"OPSIN API failed with status {response.status}")
-                    return None
+                    raise ValueError(f"OPSIN API failed with status {response.status}")
             except Exception as e:
-                logger.error(f"OPSIN API error: {e}")
                 raise e
 
     @backoff.on_exception(
@@ -107,10 +105,8 @@ class Name2Smiles:
                 async with session.get(url, timeout=self.timeout) as response:
                     if response.status == 200:
                         return await response.text()
-                    logger.warning(f"CACTUS API failed with status {response.status}")
-                    return None
+                    raise ValueError(f"CACTUS API failed with status {response.status}")
             except Exception as e:
-                logger.error(f"CACTUS API error: {e}")
                 raise e
 
     @backoff.on_exception(
@@ -139,10 +135,10 @@ class Name2Smiles:
                     if response.status == 200:
                         data = await response.json()
                         return data["PropertyTable"]["Properties"][0]["IsomericSMILES"]
-                    logger.warning(f"PubChem API failed with status {response.status}")
-                    return None
+                    raise ValueError(
+                        f"PubChem API failed with status {response.status}"
+                    )
             except Exception as e:
-                logger.error(f"PubChem API error: {e}")
                 raise e
 
     @backoff.on_exception(
@@ -176,10 +172,10 @@ class Name2Smiles:
                         message_content = await response.text()
                         message_text = message_content.split("Message:")[1].strip()
                         return message_text
-                    logger.warning(f"Unknown API failed with status {response.status}")
-                    return None
+                    raise ValueError(
+                        f"Unknown API failed with status {response.status}"
+                    )
             except Exception as e:
-                logger.error(f"Unknown API error: {e}")
                 raise e
 
     async def get_smiles(self) -> Optional[str]:
@@ -206,10 +202,10 @@ class Name2Smiles:
                 smiles = await result
                 if smiles:
                     return smiles
-            except Exception as e:
-                logger.error(f"Error in get_smiles: {e}")
+            except Exception:
                 continue
 
+        logger.error(f"Could not find SMILES for {unquote(self.name)}")
         raise ValueError(f"Could not find SMILES for {unquote(self.name)}")
 
 
@@ -252,13 +248,12 @@ class Smiles2Name:
         self.smiles = smiles
         self.timeout = 10  # seconds
 
-    backoff.on_exception(
+    @backoff.on_exception(
         backoff.expo,
         (aiohttp.ClientError, asyncio.TimeoutError),
         max_time=10,
         logger=logger,
     )
-
     async def pubchem(self) -> Optional[str]:
         """
         Query PubChem API to get IUPAC name from SMILES.
@@ -277,19 +272,18 @@ class Smiles2Name:
                 async with session.get(url, timeout=self.timeout) as response:
                     if response.status == 200:
                         return await response.text()
-                    logger.warning(f"PubChem API failed with status {response.status}")
-                    return None
+                    raise ValueError(
+                        f"PubChem API failed with status {response.status}"
+                    )
             except Exception as e:
-                logger.error(f"PubChem API error: {e}")
                 raise e
 
-    backoff.on_exception(
+    @backoff.on_exception(
         backoff.expo,
         (aiohttp.ClientError, asyncio.TimeoutError),
         max_time=10,
         logger=logger,
     )
-
     async def cactus(self) -> Optional[str]:
         """
         Query CACTUS API to get IUPAC name from SMILES.
@@ -309,10 +303,8 @@ class Smiles2Name:
                 async with session.get(url, timeout=self.timeout) as response:
                     if response.status == 200:
                         return await response.text()
-                    logger.warning(f"CACTUS API failed with status {response.status}")
-                    return None
+                    raise ValueError(f"CACTUS API failed with status {response.status}")
             except Exception as e:
-                logger.error(f"CACTUS API error: {e}")
                 raise e
 
     async def get_name(self) -> Optional[str]:
@@ -338,10 +330,10 @@ class Smiles2Name:
                 name = await result
                 if name:
                     return name
-            except Exception as e:
-                logger.error(f"Error in get_name: {e}")
+            except Exception:
                 continue
 
+        logger.error(f"Could not find name for {self.smiles}")
         raise ValueError(f"Could not find name for {self.smiles}")
 
 

@@ -1,6 +1,5 @@
 import os
 import backoff
-import safe
 import deepsmiles
 import selfies
 from rdkit import Chem
@@ -12,9 +11,6 @@ from typing import Optional
 from loguru import logger
 import aiohttp
 import asyncio
-from dotenv import load_dotenv
-
-load_dotenv("../../.env", override=True)
 
 
 class Name2Smiles:
@@ -84,7 +80,7 @@ class Name2Smiles:
                     return None
             except Exception as e:
                 logger.error(f"OPSIN API error: {e}")
-                return None
+                raise e
 
     @backoff.on_exception(
         backoff.expo,
@@ -115,7 +111,7 @@ class Name2Smiles:
                     return None
             except Exception as e:
                 logger.error(f"CACTUS API error: {e}")
-                return None
+                raise e
 
     @backoff.on_exception(
         backoff.expo,
@@ -147,8 +143,7 @@ class Name2Smiles:
                     return None
             except Exception as e:
                 logger.error(f"PubChem API error: {e}")
-                print(e)
-                return None
+                raise e
 
     @backoff.on_exception(
         backoff.expo,
@@ -185,7 +180,7 @@ class Name2Smiles:
                     return None
             except Exception as e:
                 logger.error(f"Unknown API error: {e}")
-                return None
+                raise e
 
     async def get_smiles(self) -> Optional[str]:
         """Query all APIs in parallel until a valid SMILES is found.
@@ -254,12 +249,7 @@ class Smiles2Name:
         if mol is None:
             raise ValueError(f"Invalid SMILES: {smiles}")
 
-        try:
-            self.smiles = quote(smiles)
-        except Exception as e:
-            logger.error(f"Error encoding name: {e}")
-            raise ValueError(f"Invalid chemical name: {smiles}")
-
+        self.smiles = smiles
         self.timeout = 10  # seconds
 
     backoff.on_exception(
@@ -280,17 +270,18 @@ class Smiles2Name:
             aiohttp.ClientError: If the API request fails.
             asyncio.TimeoutError: If the request times out.
         """
-        url = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/smiles/{self.smiles}/property/IUPACName/TXT"
+        smiles = quote(self.smiles)
+        url = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/smiles/{smiles}/property/IUPACName/TXT"
         async with aiohttp.ClientSession() as session:
             try:
                 async with session.get(url, timeout=self.timeout) as response:
                     if response.status == 200:
                         return await response.text()
-                    logger.warning(f"CACTUS API failed with status {response.status}")
+                    logger.warning(f"PubChem API failed with status {response.status}")
                     return None
             except Exception as e:
-                logger.error(f"CACTUS API error: {e}")
-                return None
+                logger.error(f"PubChem API error: {e}")
+                raise e
 
     backoff.on_exception(
         backoff.expo,
@@ -310,7 +301,8 @@ class Smiles2Name:
             aiohttp.ClientError: If the API request fails.
             asyncio.TimeoutError: If the request times out.
         """
-        url = f"https://cactus.nci.nih.gov/chemical/structure/{self.smiles}/iupac_name"
+        inchi = Chem.MolToInchi(Chem.MolFromSmiles(self.smiles))
+        url = f"https://cactus.nci.nih.gov/chemical/structure/{inchi}/iupac_name"
 
         async with aiohttp.ClientSession() as session:
             try:
@@ -321,7 +313,7 @@ class Smiles2Name:
                     return None
             except Exception as e:
                 logger.error(f"CACTUS API error: {e}")
-                return None
+                raise e
 
     async def get_name(self) -> Optional[str]:
         """
@@ -350,7 +342,7 @@ class Smiles2Name:
                 logger.error(f"Error in get_name: {e}")
                 continue
 
-        raise ValueError(f"Could not find name for {unquote(self.smiles)}")
+        raise ValueError(f"Could not find name for {self.smiles}")
 
 
 def smiles_to_selfies(smiles: str) -> str:
@@ -419,4 +411,6 @@ def smiles_to_safe(smiles: str) -> str:
     Returns:
         str: SAFE of the input SMILES
     """
+    import safe
+
     return safe.encode(smiles, seed=42, canonical=True, randomize=False)

@@ -27,13 +27,15 @@ converters_image = (
             "rdkit",
             "selfies",
             "deepsmiles",
-            "safe-mol"  # package for SAFE encoding
             "aiohttp",
             "backoff",
+            "loguru",
         ]
     )
     .env({"PRIVATE_API_URL": os.environ.get("PRIVATE_API_URL", "")})
 )
+
+safe_image = Image.debian_slim().pip_install("safe-mol")
 
 
 chemenv_name = os.getenv("CHEMENV_NAME", "")
@@ -65,7 +67,7 @@ async def get_iupac_name(smiles: str) -> str:
     converter = _Smiles2Name(smiles)
     name = await converter.get_name()
     if name is None:
-        return ""  # or raise an exception if that's more appropriate
+        return ""
     return name
 
 
@@ -102,7 +104,7 @@ def convert_to_inchi(smiles: str) -> str:
     return _smiles_to_inchi(smiles)
 
 
-@app.function(image=converters_image)
+@app.function(image=safe_image)
 def convert_to_safe(smiles: str) -> str:
     """Convert SMILES to SAFE encoding."""
     return _smiles_to_safe(smiles)

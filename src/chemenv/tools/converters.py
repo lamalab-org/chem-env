@@ -1,16 +1,39 @@
+from modal import Image
 import os
-import backoff
-import deepsmiles
-import selfies
-from rdkit import Chem
-from urllib.parse import (
-    quote,
-    unquote,
+
+
+_converters_image = (
+    Image.debian_slim(python_version="3.12")
+    .pip_install(
+        [
+            "rdkit",
+            "selfies",
+            "deepsmiles",
+            "aiohttp",
+            "backoff",
+            "loguru",
+        ]
+    )
+    .env({"PRIVATE_API_URL": os.environ.get("PRIVATE_API_URL", "")})
 )
-from typing import Optional
-from loguru import logger
-import aiohttp
-import asyncio
+
+with _converters_image.imports():
+    import os
+    from loguru import logger
+    import aiohttp
+    import backoff
+    import asyncio
+    from typing import Optional
+    from urllib.parse import quote, unquote
+    from rdkit import Chem
+    import deepsmiles
+    import selfies
+
+
+_safe_image = Image.debian_slim().pip_install("safe-mol")
+
+with _safe_image.imports():
+    pass
 
 
 class Name2Smiles:

@@ -1,5 +1,6 @@
 import os
 from modal import Image
+from typing import Optional, List, Dict, Any
 
 converters_image = (
     Image.debian_slim(python_version="3.12")
@@ -26,12 +27,13 @@ with converters_image.imports():
     import asyncio
 
 
-pubchem_image = Image.debian_slim().pip_install(
+pubchem_image = Image.debian_slim(python_version="3.12").pip_install(
     "backoff",
     "asyncio",
     "aiohttp",
     "pubchempy",
     "loguru",
+    "rdkit",
 )
 with pubchem_image.imports():
     import backoff
@@ -39,15 +41,9 @@ with pubchem_image.imports():
     import asyncio
     from typing import Dict, Any, Optional
     import pubchempy as pcp
+    from rdkit import Chem
     from urllib.parse import quote
     from loguru import logger
-"""
-Full
-{base_url}/compound/cid/{self.cid}/record/JSON
-
-Precise
-{base_url}/compound/cid/{self.cid}/record/JSON
-"""
 
 
 class PubChem:
@@ -124,6 +120,15 @@ class PubChem:
     async def get_data_from_url(
         self, record_url: Optional[str] = None
     ) -> Dict[Any, Any]:
+        """
+        Fetch compound data from PubChem REST API using a specific URL
+
+        Args:
+            record_url (str): URL to fetch compound data from
+
+        Returns:
+            dict: Compound data in JSON format
+        """
         if not record_url:
             raise ValueError("No record URL provided.")
         timeout = aiohttp.ClientTimeout(total=10)
@@ -170,23 +175,36 @@ class PubChem:
             except Exception as e:
                 raise e
 
+    async def _get_compound_cid(self) -> Optional[str]:
+        """
+        Get the PubChem CID for a compound.
+
+        Returns:
+            int: PubChem CID of the compound.
+        """
+        return self.cid
+
     async def _get_number_atoms(self) -> Optional[int]:
-        url = [
-            "/compound/cid/",
-            "/record/JSON",
-        ]
-        logger.info(f"Getting number of atoms for CID {self.cid}")
+        """
+        Get the number of atoms in a compound using RDKit.
+
+        Returns:
+            int: Number of atoms in the compound.
+        """
         try:
-            data = (await self.get_compound_data(url))["PC_Compounds"][0]["atoms"][
-                "aid"
-            ]
+            mol = Chem.MolFromSmiles(await self._get_canonical_smiles())
+            return mol.GetNumAtoms()
         except Exception as e:
             logger.error(f"No atoms found. {e}")
             raise ValueError(f"No atoms found. {e}")
-        logger.info(f"Number of atoms for CID {self.cid}: {len(data)}")
-        return len(data)
 
     async def _get_isomeric_smiles(self) -> Optional[str]:
+        """
+        Get the isomeric SMILES for a compound from PubChem.
+
+        Returns:
+            str: Isomeric SMILES of the compound.
+        """
         url = [
             "/compound/cid/",
             "/property/IsomericSMILES/JSON",
@@ -203,6 +221,12 @@ class PubChem:
         return data
 
     async def _get_canonical_smiles(self) -> Optional[str]:
+        """
+        Get the canonical SMILES for a compound from PubChem.
+
+        Returns:
+            str: Canonical SMILES of the compound.
+        """
         url = [
             "/compound/cid/",
             "/property/CanonicalSMILES/JSON",
@@ -219,6 +243,12 @@ class PubChem:
         return data
 
     async def _get_compound_mass(self) -> Optional[float]:
+        """
+        Get the molecular weight of a compound from PubChem.
+
+        Returns:
+            float: Molecular weight of the compound.
+        """
         url = [
             "/compound/cid/",
             "/property/MolecularWeight/JSON",
@@ -235,6 +265,12 @@ class PubChem:
         return data
 
     async def _get_compound_charge(self) -> Optional[int]:
+        """
+        Get the charge of a compound from PubChem.
+
+        Returns:
+            int: Charge of the compound.
+        """
         url = [
             "/compound/cid/",
             "/property/Charge/JSON",
@@ -251,6 +287,12 @@ class PubChem:
         return data
 
     async def _get_compound_formula(self) -> Optional[str]:
+        """
+        Get the formula of a compound from PubChem.
+
+        Returns:
+            str: Formula of the compound.
+        """
         url = [
             "/compound/cid/",
             "/property/MolecularFormula/JSON",
@@ -267,6 +309,12 @@ class PubChem:
         return data
 
     async def _get_number_isomers(self) -> Optional[int]:
+        """
+        Get the number of compound isomers for a compound from PubChem.
+
+        Returns:
+            int: Number of compound isomers.
+        """
         url = [
             "/compound/fastformula/",
             "/cids/JSON",
@@ -283,6 +331,13 @@ class PubChem:
         return data
 
     async def _get_compound_isomers(self) -> List[Optional[str]]:
+        """
+        Get the compound isomers for a compound from PubChem.
+        This function can take some time depending on the number of isomers.
+
+        Returns:
+            list: List of compound isomers.
+        """
         url = [
             "/compound/fastformula/",
             "/cids/JSON",
@@ -291,20 +346,25 @@ class PubChem:
         formula = await self._get_compound_formula()
         url = self.base_url + url[0] + quote(str(formula)) + url[1]
         try:
-            isomers_cids = (await self.get_data_from_url(url))["IdentifierList"]["CID"][
-                :4
-            ]
+            isomers_cids = (await self.get_data_from_url(url))["IdentifierList"]["CID"]
             data = []
             for i in isomers_cids:
                 self.cid = i
+                # Isomeric SMILES to capture enantiomers
                 data.append(await self._get_isomeric_smiles())
         except Exception as e:
             logger.error(f"No compound isomers found. {e}")
             raise ValueError(f"No compound isomers found. {e}")
-        logger.info(f"Compound isomers for CID {self.cid}: {data[5:]}")
+        logger.info(f"Compound isomers for CID {self.cid}: {data}")
         return data
 
     async def _get_number_heavy_atoms(self) -> Optional[int]:
+        """
+        Get the number of heavy atoms in a compound from PubChem.
+
+        Returns:
+            int: Number of heavy atoms in the compound.
+        """
         url = [
             "/compound/cid/",
             "/property/HeavyAtomCount/JSON",
@@ -321,6 +381,12 @@ class PubChem:
         return data
 
     async def _get_number_chiral_atoms(self) -> Optional[int]:
+        """
+        Get the number of chiral atoms in a compound from PubChem.
+
+        Returns:
+            int: Number of chiral atoms in the compound.
+        """
         url = [
             "/compound/cid/",
             "/record/JSON",
@@ -433,25 +499,9 @@ class Smiles2Name:
             try:
                 name = await result
                 if name:
-                    return name
+                    return name.strip()
             except Exception:
                 continue
 
         logger.error(f"Could not find name for {self.smiles}")
         raise ValueError(f"Could not find name for {self.smiles}")
-
-
-# if __name__ == "__main__":
-# async def main():
-# try:
-# pubchem = await PubChem.create("2244")
-# isomers = await pubchem._get_number_atoms()
-# print(isomers)
-# if isomers is None:
-# return ""
-# return isomers
-# except Exception as e:
-# logger.error(f"Error processing compound: {e}")
-# return None
-
-# asyncio.run(main())

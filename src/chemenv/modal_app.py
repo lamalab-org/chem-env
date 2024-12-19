@@ -106,7 +106,7 @@ async def get_number_isomers(compound_id: str) -> int:
     return number_isomers
 
 
-@app.function(image=_pubchem_image)
+@app.function(image=_pubchem_image, timeout=86399)
 async def get_compound_isomers(*args, **kwargs):
     pubchem = await PubChem.create(*args, **kwargs)
     data = await pubchem._get_compound_isomers()

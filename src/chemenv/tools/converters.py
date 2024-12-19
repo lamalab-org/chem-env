@@ -224,7 +224,7 @@ class Name2Smiles:
             try:
                 smiles = await result
                 if smiles:
-                    return smiles
+                    return smiles.strip()
             except Exception:
                 continue
 
@@ -352,7 +352,7 @@ class Smiles2Name:
             try:
                 name = await result
                 if name:
-                    return name
+                    return name.strip()
             except Exception:
                 continue
 

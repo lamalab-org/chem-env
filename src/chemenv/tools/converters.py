@@ -27,10 +27,10 @@ with _converters_image.imports():
 _safe_image = Image.debian_slim().pip_install("safe-mol")
 
 with _safe_image.imports():
-    pass
+    import safe
 
 
-class Name2Smiles:
+class _Name2Smiles:
     """Convert chemical names to SMILES notation using multiple chemical APIs.
 
     This class attempts to convert chemical compound names to SMILES notation
@@ -188,7 +188,7 @@ class Name2Smiles:
         raise ValueError(f"Could not find SMILES for {unquote(self.name)}")
 
 
-class Smiles2Name:
+class _Smiles2Name:
     """
     Convert SMILES chemical notation to IUPAC chemical names.
 
@@ -220,7 +220,7 @@ class Smiles2Name:
             >>> await converter.get_smiles()
             'CCO'
         """
-        mol = Chem.MolFromSmiles(smiles)
+        mol = Chem.MolFromSmiles(smiles.strip())
         if mol is None:
             raise ValueError(f"Invalid SMILES: {smiles}")
 
@@ -316,7 +316,7 @@ class Smiles2Name:
         raise ValueError(f"Could not find name for {self.smiles}")
 
 
-def smiles_to_selfies(smiles: str) -> str:
+def _smiles_to_selfies(smiles: str) -> str:
     """
     Takes a SMILES and return the SELFIES encoding.
 
@@ -327,10 +327,10 @@ def smiles_to_selfies(smiles: str) -> str:
         str: SELFIES of the input SMILES
     """
 
-    return selfies.encoder(smiles)
+    return selfies.encoder(smiles.strip())
 
 
-def smiles_to_deepsmiles(smiles: str) -> str:
+def _smiles_to_deepsmiles(smiles: str) -> str:
     """
     Takes a SMILES and return the DeepSMILES encoding.
 
@@ -341,24 +341,10 @@ def smiles_to_deepsmiles(smiles: str) -> str:
         str: DeepSMILES of the input SMILES
     """
     converter = deepsmiles.Converter(rings=True, branches=True)
-    return converter.encode(smiles)
+    return converter.encode(smiles.strip())
 
 
-def smiles_to_canoncial(smiles: str) -> str:
-    """
-    Takes a SMILES and return the canonical SMILES.
-
-    Args:
-        smiles: SMILES string
-
-    Returns:
-        str: Canonical SMILES of the input SMILES
-    """
-    mol = Chem.MolFromSmiles(smiles)
-    return Chem.MolToSmiles(mol)
-
-
-def smiles_to_inchi(smiles: str) -> str:
+def _smiles_to_inchi(smiles: str) -> str:
     """
     Takes a SMILES and return the InChI.
 
@@ -367,12 +353,36 @@ def smiles_to_inchi(smiles: str) -> str:
 
     Returns:
         str: InChI of the input SMILES
+
+    Raises:
+        ValueError: If the input SMILES is invalid
     """
-    mol = Chem.MolFromSmiles(smiles)
+    mol = Chem.MolFromSmiles(smiles.strip())
+    if mol is None:
+        raise ValueError(f"Invalid SMILES: {smiles}")
     return Chem.MolToInchi(mol)
 
 
-def smiles_to_safe(smiles: str) -> str:
+def _smiles_to_inchikey(smiles: str) -> str:
+    """
+    Takes a SMILES and return the InChIKey.
+
+    Args:
+        smiles: SMILES string
+
+    Returns:
+        str: InChIKey of the input SMILES
+
+    Raises:
+        ValueError: If the input SMILES is invalid
+    """
+    mol = Chem.MolFromSmiles(smiles.strip())
+    if mol is None:
+        raise ValueError(f"Invalid SMILES: {smiles}")
+    return Chem.MolToInchiKey(mol)
+
+
+def _smiles_to_safe(smiles: str) -> str:
     """
     Takes a SMILES and return the SAFE (https://github.com/datamol-io/safe).
 
@@ -382,6 +392,54 @@ def smiles_to_safe(smiles: str) -> str:
     Returns:
         str: SAFE of the input SMILES
     """
-    import safe
+    return safe.encode(smiles.strip(), seed=42, canonical=True, randomize=False)
 
-    return safe.encode(smiles, seed=42, canonical=True, randomize=False)
+
+def _selfies_to_smiles(_selfies: str) -> str:
+    """
+    Takes a SELFIES and return the SMILES.
+
+    Args:
+        selfies: SELFIES string
+
+    Returns:
+        str: SMILES of the input SELFIES
+    """
+    return selfies.decoder(_selfies.strip())
+
+
+def _inchi_to_smiles(inchi: str) -> str:
+    """
+    Takes an InChI and return the SMILES.
+
+    Args:
+        inchi: InChI string
+
+    Returns:
+        str: SMILES of the input InChI
+
+    Raises:
+        ValueError: If the input InChI is invalid
+    """
+    mol = Chem.MolFromInchi(inchi.strip())
+    if mol is None:
+        raise ValueError(f"Invalid InChI: {inchi}")
+    return Chem.MolToSmiles(mol)
+
+
+def _deepsmiles_to_smiles(_deepsmiles: str) -> str:
+    """
+    Takes a DeepSMILES and return the SMILES.
+
+    Args:
+        deepsmiles: DeepSMILES string
+
+    Returns:
+        str: SMILES of the input DeepSMILES
+    """
+    converter = deepsmiles.Converter(rings=True, branches=True)
+    try:
+        decoded = converter.decode(_deepsmiles.strip())
+        return decoded
+    except deepsmiles.DecodeError:
+        raise ValueError(f"Invalid DeepSMILES: {_deepsmiles}")

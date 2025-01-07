@@ -7,13 +7,16 @@ from chemenv.tools.cheminformatics import (
 from chemenv.tools.converters import (
     _converters_image,
     _safe_image,
-    Smiles2Name as _Smiles2Name,
-    Name2Smiles as _Name2Smiles,
-    smiles_to_selfies as _smiles_to_selfies,
-    smiles_to_canoncial as _smiles_to_canoncial,
-    smiles_to_deepsmiles as _smiles_to_deepsmiles,
-    smiles_to_inchi as _smiles_to_inchi,
-    smiles_to_safe as _smiles_to_safe,
+    _Smiles2Name,
+    _Name2Smiles,
+    _smiles_to_selfies,
+    _smiles_to_deepsmiles,
+    _smiles_to_inchi,
+    _smiles_to_inchikey,
+    _smiles_to_safe,
+    _selfies_to_smiles,
+    _inchi_to_smiles,
+    _deepsmiles_to_smiles,
 )
 import os
 
@@ -79,18 +82,36 @@ def convert_to_deepsmiles(smiles: str) -> str:
 
 
 @app.function(image=_converters_image)
-def convert_to_canonical(smiles: str) -> str:
-    """Convert SMILES to canonical SMILES."""
-    return _smiles_to_canoncial(smiles)
-
-
-@app.function(image=_converters_image)
 def convert_to_inchi(smiles: str) -> str:
     """Convert SMILES to InChI."""
     return _smiles_to_inchi(smiles)
+
+
+@app.function(image=_converters_image)
+def convert_to_inchikey(smiles: str) -> str:
+    """Convert SMILES to InChIKey."""
+    return _smiles_to_inchikey(smiles)
 
 
 @app.function(image=_safe_image)
 def convert_to_safe(smiles: str) -> str:
     """Convert SMILES to SAFE encoding."""
     return _smiles_to_safe(smiles)
+
+
+@app.function(image=_converters_image)
+def selfies_to_smiles(selfies: str) -> str:
+    """Convert SELFIES to SMILES."""
+    return _selfies_to_smiles(selfies)
+
+
+@app.function(image=_converters_image)
+def inchi_to_smiles(inchi: str) -> str:
+    """Convert InChI to SMILES."""
+    return _inchi_to_smiles(inchi)
+
+
+@app.function(image=_converters_image)
+def deepsmiles_to_smiles(deepsmiles: str) -> str:
+    """Convert DeepSMILES to SMILES."""
+    return _deepsmiles_to_smiles(deepsmiles)

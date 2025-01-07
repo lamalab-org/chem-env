@@ -43,6 +43,7 @@ with pubchem_image.imports():
     import pubchempy as pcp
     from rdkit import Chem
     from urllib.parse import quote
+    from time import sleep
     from loguru import logger
 
 
@@ -59,6 +60,7 @@ class PubChem:
         """
         self.cid = None
         self.base_url = "https://pubchem.ncbi.nlm.nih.gov/rest/pug"
+        self.long_url = "https://pubchem.ncbi.nlm.nih.gov/rest/pug_view/data/compound/{cid}/JSON/?response_type=display&heading="
         logger.info(f"Initialized PubChem handler for CID {self.cid}")
 
     @classmethod
@@ -330,7 +332,7 @@ class PubChem:
         logger.info(f"Number of compound isomers for CID {self.cid}: {data}")
         return data
 
-    async def _get_compound_isomers(self) -> List[Optional[str]]:
+    async def _get_compound_isomers(self) -> List[str]:
         """
         Get the compound isomers for a compound from PubChem.
         This function can take some time depending on the number of isomers.
@@ -349,9 +351,19 @@ class PubChem:
             isomers_cids = (await self.get_data_from_url(url))["IdentifierList"]["CID"]
             data = []
             for i in isomers_cids:
+                sleep(0.5)
                 self.cid = i
-                # Isomeric SMILES to capture enantiomers
-                data.append(await self._get_isomeric_smiles())
+                try:
+                    # Isomeric SMILES to capture enantiomers
+                    smiles = await self._get_isomeric_smiles()
+                    if smiles:
+                        data.append(smiles)
+                except ValueError as ve:
+                    logger.warning(f"Could not get SMILES for CID {i}: {ve}")
+                    continue
+                except Exception as e:
+                    logger.error(f"Unexpected error getting SMILES for CID {i}: {e}")
+                    continue
         except Exception as e:
             logger.error(f"No compound isomers found. {e}")
             raise ValueError(f"No compound isomers found. {e}")
@@ -402,106 +414,265 @@ class PubChem:
         logger.info(f"Number of chiral atoms for CID {self.cid}: {data}")
         return data
 
+    async def _format_long_url(self, heading):
+        """
+        Format the long URL to get specific information from PubChem and return the data.
 
-class Smiles2Name:
-    def __init__(self, smiles):
-        """Initialize Name2Smiles converter with a chemical compound name.
-        Takes a chemical compound name and prepares it for API queries by URL-encoding.
-        Sets default timeout for API requests to 10 seconds.
         Args:
-            name (str): Chemical compound name to convert to SMILES notation.
-                Should be a valid IUPAC or common chemical name.
+            heading (str): Heading of the information to retrieve from PubChem
+
+        Returns:
+            dict: Data retrieved from PubChem
+
         Raises:
-            ValueError: If the name cannot be URL-encoded or contains invalid characters.
+            ValueError: If the data could not be retrieved
+
         Example:
-            >>> converter = Name2Smiles("ethanol")
-            >>> await converter.get_smiles()
-            'CCO'
+            >>> await self._format_long_url("Mass Spectrometry")
+            {'Information': [{'Name': 'Mass bank ID', 'ReferenceNumber': 1, 'Value': {'StringWithMarkup': [{'String...
         """
-        mol = Chem.MolFromSmiles(smiles)
-        if mol is None:
-            raise ValueError(f"Invalid SMILES: {smiles}")
+        url = self.long_url.format(cid=self.cid) + quote(heading)
+        logger.info(f"Getting spectral information for CID {self.cid}")
+        try:
+            return await self.get_data_from_url(url)
+        except Exception as e:
+            logger.error(f"Failed to get spectral information: {str(e)}")
+            raise ValueError(f"Failed to get spectral information: {str(e)}")
 
-        self.smiles = smiles
-        self.timeout = 10  # seconds
-
-    @backoff.on_exception(
-        backoff.expo,
-        (aiohttp.ClientError, asyncio.TimeoutError),
-        max_time=10,
-        logger=logger,
-    )
-    async def pubchem(self) -> Optional[str]:
+    async def _format_ms_spectra(self, data):
         """
-        Query PubChem API to get IUPAC name from SMILES.
+        Format the MS spectra data retrieved from PubChem.
+
+        Args:
+            data (dict): Data retrieved from PubChem
+
         Returns:
-            Optional[str]: IUPAC name if found, None if the query failed.
+            dict: Formatted MS spectra data
+
         Raises:
-            aiohttp.ClientError: If the API request fails.
-            asyncio.TimeoutError: If the request times out.
+            ValueError: If the data could not be retrieved
         """
-        smiles = quote(self.smiles)
-        url = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/smiles/{smiles}/property/IUPACName/TXT"
-        async with aiohttp.ClientSession() as session:
-            try:
-                async with session.get(url, timeout=self.timeout) as response:
-                    if response.status == 200:
-                        return await response.text()
-                    raise ValueError(
-                        f"PubChem API failed with status {response.status}"
-                    )
-            except Exception as e:
-                raise e
+        try:
+            information = data["Information"]
+        except KeyError:
+            raise ValueError("No MS spectra found")
 
-    @backoff.on_exception(
-        backoff.expo,
-        (aiohttp.ClientError, asyncio.TimeoutError),
-        max_time=10,
-        logger=logger,
-    )
-    async def cactus(self) -> Optional[str]:
-        """
-        Query CACTUS API to get IUPAC name from SMILES.
-        Returns:
-            Optional[str]: IUPAC name if found, None if the query failed.
-        Raises:
-            aiohttp.ClientError: If the API request fails.
-            asyncio.TimeoutError: If the request times out.
-        """
-        inchi = Chem.MolToInchi(Chem.MolFromSmiles(self.smiles))
-        url = f"https://cactus.nci.nih.gov/chemical/structure/{inchi}/iupac_name"
+        field_mapping = {
+            "Mass bank ID": "MoNA ID",
+            "Spectra type": "MS Category",
+            "MS Type": "MS Type",
+            "MS Level": "MS Level",
+            "Instrument": "Instrument",
+            "Instrument Type": "Instrument Type",
+            "Ionization Mode": "Ionization Mode",
+            "Top Peaks": "StringWithMarkup",
+        }
 
-        async with aiohttp.ClientSession() as session:
-            try:
-                async with session.get(url, timeout=self.timeout) as response:
-                    if response.status == 200:
-                        return await response.text()
-                    raise ValueError(f"CACTUS API failed with status {response.status}")
-            except Exception as e:
-                raise e
+        results = {}
 
-    async def get_name(self) -> Optional[str]:
-        """
-        Query multiple chemical APIs in parallel to get IUPAC name.
-        Attempts to retrieve the IUPAC name by querying multiple chemical databases
-        concurrently (CACTUS and PubChem). Returns the first successful result.
-        Returns:
-            str: The IUPAC name of the chemical compound.
-        Raises:
-            ValueError: If no name could be found in any of the chemical databases.
-        """
-        tasks = [
-            self.cactus(),
-            self.pubchem(),
-        ]
-
-        for result in asyncio.as_completed(tasks):
-            try:
-                name = await result
-                if name:
-                    return name.strip()
-            except Exception:
+        counter = 0
+        for info in information:
+            if counter > 5:
+                return results
+            ref_num = info.get("ReferenceNumber")
+            if not ref_num:
                 continue
 
-        logger.error(f"Could not find name for {self.smiles}")
-        raise ValueError(f"Could not find name for {self.smiles}")
+            value = info.get("Value", {})
+
+            for orig_key, mapped_key in field_mapping.items():
+                if mapped_key == "StringWithMarkup":
+                    string_with_markup = value.get("StringWithMarkup", [])
+                    peaks = [item["String"] for item in string_with_markup]
+                    results[orig_key] = peaks
+                else:
+                    string_with_markup = value.get("StringWithMarkup", [])
+                    if string_with_markup:
+                        results[orig_key] = string_with_markup[0]["String"]
+                    else:
+                        results[orig_key] = None
+
+            counter += 1
+
+        return results
+
+    async def _format_nmr_spectra(self, data):
+        """
+        Format the NMR spectra data retrieved from PubChem.
+
+        Args:
+            data (dict): Data retrieved from PubChem
+
+        Returns:
+            dict: Formatted NMR spectra data
+
+        Raises:
+            ValueError: If the data could not be retrieved
+        """
+        try:
+            information = data["Information"]
+        except KeyError:
+            raise ValueError("No 1H NMR spectra found")
+
+        # Define field mapping
+        field_mapping = {
+            "Instrument Type": "instrument",
+            "Frequency": "frequency",
+            "Solvent": "solvent",
+            "pH": "ph",
+            "Shifts [ppm]:Intensity": "shifts",
+        }
+
+        results = {}
+
+        for info in information:
+            ref_num = info.get("ReferenceNumber")
+            if not ref_num:
+                continue
+
+            name = info.get("Name")
+            string_value = (
+                info.get("Value", {}).get("StringWithMarkup", [{}])[0].get("String")
+            )
+
+            if not (name and string_value):
+                continue
+
+            if ref_num not in results:
+                results[ref_num] = {}
+
+            if name in field_mapping:
+                results[ref_num][field_mapping[name]] = string_value
+
+        return results
+
+    async def _get_c_nmr_spectra(self):
+        """
+        Get the C-NMR spectra for a compound from PubChem.
+
+        Returns:
+            dict: C-NMR spectra data
+
+        Raises:
+            ValueError: If the data could not be retrieved
+        """
+        try:
+            data = await self._format_long_url("13C NMR Spectra")
+            return self._format_nmr_spectra(data)
+        except Exception:
+            raise ValueError("No C-NMR spectra found. {e}")
+
+    async def _get_h_nmr_spectra(self):
+        """
+        Get the 1H NMR spectra for a compound from PubChem.
+
+        Returns:
+            dict: 1H NMR spectra data
+
+        Raises:
+            ValueError: If the data could not be retrieved
+        """
+        try:
+            data = await self._format_long_url("1H NMR Spectra")
+            return self._format_nmr_spectra(data)
+        except Exception:
+            raise ValueError("No 1H NMR spectra found. {e}")
+
+    async def _get_uv_spectra(self):
+        """
+        Get the UV spectra for a compound from PubChem.
+
+        Returns:
+            str: UV spectra data
+
+        Raises:
+            ValueError: If the data could not be retrieved
+        """
+        data = await self._format_long_url("UV Spectra")
+        results = {}
+        try:
+            for info in data["Information"]:
+                ref_num = info["ReferenceNumber"]
+                string_value = info["Value"]["StringWithMarkup"][0]["String"]
+
+                if ref_num not in results:
+                    results[ref_num] = ""
+
+                if (
+                    "MAX ABSORPTION" in string_value.upper()
+                    or "UV MAX" in string_value.upper()
+                ):
+                    if results[ref_num]:
+                        results[ref_num] += "\n"
+                    results[ref_num] += string_value
+
+            if not results:
+                raise ValueError("No UV spectra found")
+
+            output = []
+            for ref_num, value in sorted(results.items()):
+                output.append(f"Reference {ref_num}:\n{value}")
+
+            return "\n\n".join(output)
+
+        except Exception:
+            raise ValueError("No UV spectra found")
+
+    async def _get_ms_spectra(self):
+        """
+        Get the MS spectra for a compound from PubChem.
+
+        Returns:
+            dict: MS spectra data
+
+        Raises:
+            ValueError: If the data could not be retrieved
+        """
+        try:
+            data = await self._format_long_url("Mass Spectrometry")
+            results = {}
+            for section in data["Record"]["Section"]:
+                title = section["TOCHeading"]
+                spectra = self._format_ms_spectra(section)
+                if spectra:
+                    results[title] = spectra
+
+            if not results:
+                raise ValueError("No MS spectra found")
+
+            return results
+
+        except Exception:
+            raise ValueError("No MS spectra found")
+
+    async def _get_ghs_classification(self):
+        """
+        Get the GHS classification for a compound from PubChem.
+
+        Returns:
+            dict: GHS classification data
+
+        Raises:
+            ValueError: If the data could not be retrieved
+        """
+        data = await self._format_long_url("GHS%20Classification")
+        logger.info(f"Getting GHS classification for CID {self.cid}")
+        try:
+            information_list = data["Record"]["Section"][0]["Section"][0]["Section"][0][
+                "Information"
+            ]
+
+            hazard_statements = {}
+
+            for info in information_list:
+                if info.get("Name") == "GHS Hazard Statements":
+                    ref_number = info.get("ReferenceNumber")
+                    string_values = [
+                        markup["String"] for markup in info["Value"]["StringWithMarkup"]
+                    ]
+                    hazard_statements[ref_number] = string_values
+
+            return hazard_statements
+        except Exception:
+            logger.error("Failed to get GHS classification")
+            raise ValueError("Failed to get GHS classification")

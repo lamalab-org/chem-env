@@ -1,30 +1,5 @@
-import os
 from modal import Image
 from typing import Optional, List, Dict, Any
-
-converters_image = (
-    Image.debian_slim(python_version="3.12")
-    .pip_install(
-        [
-            "rdkit",
-            "selfies",
-            "deepsmiles",
-            "aiohttp",
-            "backoff",
-            "loguru",
-        ]
-    )
-    .env({"PRIVATE_API_URL": os.environ.get("PRIVATE_API_URL", "")})
-)
-
-with converters_image.imports():
-    import backoff
-    from rdkit import Chem
-    from urllib.parse import quote
-    from typing import Optional, List
-    from loguru import logger
-    import aiohttp
-    import asyncio
 
 
 pubchem_image = Image.debian_slim(python_version="3.12").pip_install(
@@ -414,7 +389,7 @@ class PubChem:
         logger.info(f"Number of chiral atoms for CID {self.cid}: {data}")
         return data
 
-    async def _format_long_url(self, heading):
+    async def _format_long_url(self, heading: str) -> Dict[str, Any]:
         """
         Format the long URL to get specific information from PubChem and return the data.
 
@@ -507,7 +482,7 @@ class PubChem:
             dict: Formatted NMR spectra data
 
         Raises:
-            ValueError: If the data could not be retrieved
+            ValueError: If the data could nt be retrieved
         """
         try:
             information = data["Information"]
@@ -546,7 +521,7 @@ class PubChem:
 
         return results
 
-    async def _get_c_nmr_spectra(self):
+    async def _get_c_nmr_spectra(self) -> Dict[str, Any]:
         """
         Get the C-NMR spectra for a compound from PubChem.
 
@@ -562,7 +537,7 @@ class PubChem:
         except Exception:
             raise ValueError("No C-NMR spectra found. {e}")
 
-    async def _get_h_nmr_spectra(self):
+    async def _get_h_nmr_spectra(self) -> Dict[str, Any]:
         """
         Get the 1H NMR spectra for a compound from PubChem.
 
@@ -578,7 +553,7 @@ class PubChem:
         except Exception:
             raise ValueError("No 1H NMR spectra found. {e}")
 
-    async def _get_uv_spectra(self):
+    async def _get_uv_spectra(self) -> str:
         """
         Get the UV spectra for a compound from PubChem.
 
@@ -618,7 +593,7 @@ class PubChem:
         except Exception:
             raise ValueError("No UV spectra found")
 
-    async def _get_ms_spectra(self):
+    async def _get_ms_spectra(self) -> Dict[str, Any]:
         """
         Get the MS spectra for a compound from PubChem.
 
@@ -645,7 +620,7 @@ class PubChem:
         except Exception:
             raise ValueError("No MS spectra found")
 
-    async def _get_ghs_classification(self):
+    async def _get_ghs_classification(self) -> Dict[str, List[str]]:
         """
         Get the GHS classification for a compound from PubChem.
 
@@ -676,3 +651,50 @@ class PubChem:
         except Exception:
             logger.error("Failed to get GHS classification")
             raise ValueError("Failed to get GHS classification")
+
+    async def _get_patent_count(self) -> int:
+        """
+        Get the number of patents for a compound from PubChem.
+
+        Returns:
+            int: Number of patents for the compound.
+
+        Raises:
+            ValueError: If the data could not be retrieved
+        """
+        url = [
+            "/compound/cid/",
+            "/property/PatentCount/JSON",
+        ]
+        logger.info(f"Getting number of patents for CID {self.cid}")
+        try:
+            data = (await self.get_compound_data(url))["PropertyTable"]["Properties"][
+                0
+            ]["PatentCount"]
+        except Exception as e:
+            logger.error(f"No patents found. {e}")
+            raise ValueError(f"No patents found. {e}")
+        logger.info(f"Number of patents for CID {self.cid}: {data}")
+        return data
+
+    async def return_physical_property(self):
+        """
+        Get the physical properties for a compound from PubChem.
+
+        Returns:
+            dict: Physical properties data
+
+        Raises:
+            ValueError: If the data could not be retrieved
+        """
+        data = await self._format_long_url("Experimental%20Properties")
+        results = {}
+        for section in data["Record"]["Section"]:
+            heading = section["TOCHeading"]
+
+            results[heading] = []
+            for info in data["Information"]:
+                for string_markup in info["Value"]["StringWithMarkup"]:
+                    results[heading].append(string_markup["String"])
+
+        return results

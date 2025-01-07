@@ -8,6 +8,7 @@ mendeleev_image = Image.debian_slim().pip_install("mendeleev")
 with rdkit_image.imports():
     from rdkit import Chem, DataStructs
     from rdkit.Chem import AllChem
+    from rdkit.Chem import Crippen
     import numpy as np
 
 with mendeleev_image.imports():
@@ -565,3 +566,22 @@ def _get_substructure_count(smiles: str, substructure_smarts: str) -> int:
         return len(mol.GetSubstructMatches(pattern))
     except Exception as e:
         raise ValueError(f"Error in substructure matching: {e}")
+
+
+def _pka_from_smiles(smiles: str) -> float:
+    """
+    Calculate the pKa of a molecule given its SMILES string.
+
+    Args:
+        smiles (str): The SMILES string of the molecule.
+
+    Returns:
+        float: The pKa of the molecule.
+
+    Raises:
+        ValueError: If the SMILES string is invalid.
+    """
+    mol = Chem.MolFromSmiles(smiles)
+    if mol is None:
+        raise ValueError("Invalid SMILES string")
+    return Crippen.MolLogP(mol)

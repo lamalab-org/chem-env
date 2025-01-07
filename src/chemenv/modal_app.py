@@ -20,6 +20,7 @@ from chemenv.tools.cheminformatics import (
     _get_molecular_properties,
     _has_substructure,
     _get_substructure_count,
+    _pka_from_smiles,
 )
 from chemenv.tools.pubchem import (
     PubChem,
@@ -118,6 +119,11 @@ def has_substructure(*args, **kwargs):
 @app.function(image=rdkit_image)
 def get_substructure_count(*args, **kwargs):
     return _get_substructure_count(*args, **kwargs)
+
+
+@app.function(image=rdkit_image)
+def pka_from_smiles(*args, **kwargs):
+    return _pka_from_smiles(*args, **kwargs)
 
 
 @app.function(image=mendeleev_image)

@@ -1,24 +1,18 @@
 from modal import Image
-import os
 
 
-_converters_image = (
-    Image.debian_slim(python_version="3.12")
-    .pip_install(
-        [
-            "rdkit",
-            "selfies",
-            "deepsmiles",
-            "aiohttp",
-            "backoff",
-            "loguru",
-        ]
-    )
-    .env({"PRIVATE_API_URL": os.environ.get("PRIVATE_API_URL", "")})
+_converters_image = Image.debian_slim(python_version="3.12").pip_install(
+    [
+        "rdkit",
+        "selfies",
+        "deepsmiles",
+        "aiohttp",
+        "backoff",
+        "loguru",
+    ]
 )
 
 with _converters_image.imports():
-    import os
     from loguru import logger
     import aiohttp
     import backoff
@@ -164,43 +158,6 @@ class Name2Smiles:
             except Exception as e:
                 raise e
 
-    @backoff.on_exception(
-        backoff.expo,
-        (aiohttp.ClientError, asyncio.TimeoutError),
-        max_time=10,
-        logger=logger,
-    )
-    async def unknown(self) -> Optional[str]:
-        """
-        Queries the Unknown API to convert chemical name to SMILES.
-
-        Returns:
-            str: SMILES notation if successful, None otherwise
-
-        Raises:
-            aiohttp.ClientError: On API connection errors
-            asyncio.TimeoutError: If request times out
-        """
-        base_url = os.environ.get("PRIVATE_API_URL")
-        if not base_url:
-            logger.error("Unknown API URL not set")
-            return None
-
-        url = f"{base_url}name=%7B{self.name}%7D&what=smiles"
-
-        async with aiohttp.ClientSession() as session:
-            try:
-                async with session.get(url, timeout=self.timeout) as response:
-                    if response.status == 200:
-                        message_content = await response.text()
-                        message_text = message_content.split("Message:")[1].strip()
-                        return message_text
-                    raise ValueError(
-                        f"Unknown API failed with status {response.status}"
-                    )
-            except Exception as e:
-                raise e
-
     async def get_smiles(self) -> Optional[str]:
         """Query all APIs in parallel until a valid SMILES is found.
 
@@ -217,7 +174,6 @@ class Name2Smiles:
             self.opsin_api(),
             self.cactus(),
             self.pubchem(),
-            self.unknown(),
         ]
 
         for result in asyncio.as_completed(tasks):

@@ -43,24 +43,14 @@ class _Name2Smiles:
 
     Raises:
         ValueError: If the name cannot be URL-encoded or contains invalid characters.
-    """
 
-    def __init__(self, name: str, timeout: int):
-        """Initialize converter with chemical name.
-
-        Args:
-            name (str): Chemical compound name to convert
-            timeout (int): Timeout for API requests in seconds
-
-        Raises:
-            ValueError: If name cannot be URL-encoded
-
-        Example:
+    Example:
         # Basic usage with IUPAC name
         >>> converter = Name2Smiles("2-propanone")
         >>> await converter.get_smiles()
-            'CC(=O)C'
-        """
+    """
+
+    def __init__(self, name: str, timeout: int):
         try:
             self.name = quote(name)
         except Exception as e:
@@ -203,27 +193,14 @@ class _Smiles2Name:
 
     Raises:
         ValueError: If the SMILES string is invalid or cannot be encoded.
-    """
 
-    def __init__(self, smiles: str, timeout: int):
-        """Initialize Name2Smiles converter with a chemical compound name.
-
-        Takes a chemical compound name and prepares it for API queries by URL-encoding.
-        Sets default timeout for API requests to 10 seconds.
-
-        Args:
-            name (str): Chemical compound name to convert to SMILES notation.
-                Should be a valid IUPAC or common chemical name.
-            timeout (int): Timeout for API requests in seconds.
-
-        Raises:
-            ValueError: If the name cannot be URL-encoded or contains invalid characters.
-
-        Example:
+    Example:
             >>> converter = Name2Smiles("ethanol")
             >>> await converter.get_smiles()
             'CCO'
-        """
+    """
+
+    def __init__(self, smiles: str, timeout: int):
         mol = Chem.MolFromSmiles(smiles.strip())
         if mol is None:
             raise ValueError(f"Invalid SMILES: {smiles}")

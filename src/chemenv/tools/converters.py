@@ -38,17 +38,19 @@ class _Name2Smiles:
     result is found.
 
     Args:
-        name: The chemical compound name to convert to SMILES notation.
+        name (str): The chemical compound name to convert to SMILES notation.
+        timeout (int): The timeout for API requests in seconds.
 
     Raises:
         ValueError: If the name cannot be URL-encoded or contains invalid characters.
     """
 
-    def __init__(self, name: str):
+    def __init__(self, name: str, timeout: int):
         """Initialize converter with chemical name.
 
         Args:
-            name: Chemical compound name to convert
+            name (str): Chemical compound name to convert
+            timeout (int): Timeout for API requests in seconds
 
         Raises:
             ValueError: If name cannot be URL-encoded
@@ -57,7 +59,7 @@ class _Name2Smiles:
         # Basic usage with IUPAC name
         >>> converter = Name2Smiles("2-propanone")
         >>> await converter.get_smiles()
-        'CC(=O)C'
+            'CC(=O)C'
         """
         try:
             self.name = quote(name)
@@ -65,7 +67,7 @@ class _Name2Smiles:
             logger.error(f"Error encoding name: {e}")
             raise ValueError(f"Invalid chemical name: {name}")
 
-        self.timeout = 10  # seconds
+        self.timeout = timeout  # seconds
 
     @backoff.on_exception(
         backoff.expo,
@@ -158,7 +160,7 @@ class _Name2Smiles:
             except Exception as e:
                 raise e
 
-    async def get_smiles(self) -> Optional[str]:
+    async def get_smiles(self) -> str:
         """Query all APIs in parallel until a valid SMILES is found.
 
         Attempts to convert name to SMILES using multiple APIs concurrently,
@@ -197,12 +199,13 @@ class _Smiles2Name:
 
     Args:
         smiles (str): The SMILES string representing the chemical compound.
+        timeout (int): The timeout for API requests in seconds.
 
     Raises:
         ValueError: If the SMILES string is invalid or cannot be encoded.
     """
 
-    def __init__(self, smiles):
+    def __init__(self, smiles: str, timeout: int):
         """Initialize Name2Smiles converter with a chemical compound name.
 
         Takes a chemical compound name and prepares it for API queries by URL-encoding.
@@ -211,6 +214,7 @@ class _Smiles2Name:
         Args:
             name (str): Chemical compound name to convert to SMILES notation.
                 Should be a valid IUPAC or common chemical name.
+            timeout (int): Timeout for API requests in seconds.
 
         Raises:
             ValueError: If the name cannot be URL-encoded or contains invalid characters.
@@ -225,7 +229,7 @@ class _Smiles2Name:
             raise ValueError(f"Invalid SMILES: {smiles}")
 
         self.smiles = smiles
-        self.timeout = 10  # seconds
+        self.timeout = timeout  # seconds
 
     @backoff.on_exception(
         backoff.expo,
@@ -286,7 +290,7 @@ class _Smiles2Name:
             except Exception as e:
                 raise e
 
-    async def get_name(self) -> Optional[str]:
+    async def get_name(self) -> str:
         """
         Query multiple chemical APIs in parallel to get IUPAC name.
 
@@ -321,7 +325,7 @@ def _smiles_to_selfies(smiles: str) -> str:
     Takes a SMILES and return the SELFIES encoding.
 
     Args:
-        smiles: SMILES string
+        smiles (str): SMILES string
 
     Returns:
         str: SELFIES of the input SMILES
@@ -335,7 +339,7 @@ def _smiles_to_deepsmiles(smiles: str) -> str:
     Takes a SMILES and return the DeepSMILES encoding.
 
     Args:
-        smiles: SMILES string
+        smiles (str): SMILES string
 
     Returns:
         str: DeepSMILES of the input SMILES
@@ -349,7 +353,7 @@ def _smiles_to_inchi(smiles: str) -> str:
     Takes a SMILES and return the InChI.
 
     Args:
-        smiles: SMILES string
+        smiles (str): SMILES string
 
     Returns:
         str: InChI of the input SMILES
@@ -368,7 +372,7 @@ def _smiles_to_inchikey(smiles: str) -> str:
     Takes a SMILES and return the InChIKey.
 
     Args:
-        smiles: SMILES string
+        smiles (str): SMILES string
 
     Returns:
         str: InChIKey of the input SMILES
@@ -387,7 +391,7 @@ def _smiles_to_safe(smiles: str) -> str:
     Takes a SMILES and return the SAFE (https://github.com/datamol-io/safe).
 
     Args:
-        smiles: SMILES string
+        smiles (str): SMILES string
 
     Returns:
         str: SAFE of the input SMILES
@@ -400,7 +404,7 @@ def _selfies_to_smiles(_selfies: str) -> str:
     Takes a SELFIES and return the SMILES.
 
     Args:
-        selfies: SELFIES string
+        selfies (str): SELFIES string
 
     Returns:
         str: SMILES of the input SELFIES
@@ -413,7 +417,7 @@ def _inchi_to_smiles(inchi: str) -> str:
     Takes an InChI and return the SMILES.
 
     Args:
-        inchi: InChI string
+        inchi (str): InChI string
 
     Returns:
         str: SMILES of the input InChI
@@ -432,7 +436,7 @@ def _deepsmiles_to_smiles(_deepsmiles: str) -> str:
     Takes a DeepSMILES and return the SMILES.
 
     Args:
-        deepsmiles: DeepSMILES string
+        deepsmiles (str): DeepSMILES string
 
     Returns:
         str: SMILES of the input DeepSMILES

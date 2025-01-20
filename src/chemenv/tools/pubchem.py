@@ -23,16 +23,17 @@ with pubchem_image.imports():
 
 
 class PubChem:
-    def __init__(self):
-        """
-        Initialize compound handler with any type of compound identifier.
-        Automatically converts the input to a CID and retrieves the data for that compound from PubChem.
+    """
+    PubChem handler to retrieve compound data from PubChem using PubChemPy and RDKit.
+    Automatically converts the input to a CID and retrieves the data for that compound from PubChem.
 
-        Example:
-            >>> pubchem = await PubChem.create("2244")
-            >>> isomers = await pubchem._get_number_atoms()
+    Example:
+        >>> pubchem = await PubChem.create("2244")
+        >>> isomers = await pubchem._get_number_atoms()
             21
-        """
+    """
+
+    def __init__(self):
         self.cid = None
         self.base_url = "https://pubchem.ncbi.nlm.nih.gov/rest/pug"
         self.long_url = "https://pubchem.ncbi.nlm.nih.gov/rest/pug_view/data/compound/{cid}/JSON/?response_type=display&heading="
@@ -62,6 +63,9 @@ class PubChem:
         """
         Convert any compound identifier to PubChem CID asynchronously.
         Tries different approaches to identify the compound format and get its CID.
+
+        Args:
+            compound (str): Any type of compound identifier (CID, SMILES, InChI, etc.)
 
         Returns:
             int: PubChem CID if found, None if not found
@@ -130,6 +134,9 @@ class PubChem:
         """
         Fetch compound data from PubChem REST API combining basic record and detailed data
 
+        Args:
+            record_url (str): URL to fetch compound data from
+
         Returns:
             dict: Combined compound data in JSON format containing both record and detailed information
         """
@@ -167,6 +174,13 @@ class PubChem:
 
         Returns:
             int: Number of atoms in the compound.
+
+        Raises:
+            ValueError: If no atoms are found
+
+        Example:
+            >>> await self._get_number_atoms()
+                21
         """
         try:
             mol = Chem.MolFromSmiles(await self._get_canonical_smiles())
@@ -181,6 +195,13 @@ class PubChem:
 
         Returns:
             str: Isomeric SMILES of the compound.
+
+        Raises:
+            ValueError: If the isomeric SMILES could not be retrieved
+
+        Example:
+            >>> await self._get_isomeric_smiles()
+                'CCO'
         """
         url = [
             "/compound/cid/",
@@ -203,6 +224,13 @@ class PubChem:
 
         Returns:
             str: Canonical SMILES of the compound.
+
+        Raises:
+            ValueError: If the canonical SMILES could not be retrieved
+
+        Example:
+            >>> await self._get_canonical_smiles()
+                'CCO'
         """
         url = [
             "/compound/cid/",
@@ -225,6 +253,13 @@ class PubChem:
 
         Returns:
             float: Molecular weight of the compound.
+
+        Raises:
+            ValueError: If the molecular weight could not be retrieved
+
+        Example:
+            >>> await self._get_compound_mass()
+                46.07
         """
         url = [
             "/compound/cid/",
@@ -247,6 +282,13 @@ class PubChem:
 
         Returns:
             int: Charge of the compound.
+
+        Raises:
+            ValueError: If the charge could not be retrieved
+
+        Example:
+            >>> await self._get_compound_charge()
+                0
         """
         url = [
             "/compound/cid/",
@@ -269,6 +311,13 @@ class PubChem:
 
         Returns:
             str: Formula of the compound.
+
+        Raises:
+            ValueError: If the formula could not be retrieved
+
+        Example:
+            >>> await self._get_compound_formula()
+                'C2H6O'
         """
         url = [
             "/compound/cid/",
@@ -291,6 +340,13 @@ class PubChem:
 
         Returns:
             int: Number of compound isomers.
+
+        Raises:
+            ValueError: If the number of isomers could not be retrieved
+
+        Example:
+            >>> await self._get_number_isomers()
+                2
         """
         url = [
             "/compound/fastformula/",
@@ -314,6 +370,13 @@ class PubChem:
 
         Returns:
             list: List of compound isomers.
+
+        Raises:
+            ValueError: If the isomers could not be retrieved
+
+        Example:
+            >>> await self._get_compound_isomers()
+                ['CCO', 'COC']
         """
         url = [
             "/compound/fastformula/",
@@ -351,6 +414,13 @@ class PubChem:
 
         Returns:
             int: Number of heavy atoms in the compound.
+
+        Raises:
+            ValueError: If the number of heavy atoms could not be retrieved
+
+        Example:
+            >>> await self._get_number_heavy_atoms()
+                3
         """
         url = [
             "/compound/cid/",
@@ -373,6 +443,13 @@ class PubChem:
 
         Returns:
             int: Number of chiral atoms in the compound.
+
+        Raises:
+            ValueError: If the number of chiral atoms could not be retrieved
+
+        Example:
+            >>> await self._get_number_chiral_atoms()
+                1
         """
         url = [
             "/compound/cid/",
@@ -404,7 +481,7 @@ class PubChem:
 
         Example:
             >>> await self._format_long_url("Mass Spectrometry")
-            {'Information': [{'Name': 'Mass bank ID', 'ReferenceNumber': 1, 'Value': {'StringWithMarkup': [{'String...
+                {'Information': [{'Name': 'Mass bank ID', 'ReferenceNumber': 1, 'Value': {'StringWithMarkup': [{'String...
         """
         url = self.long_url.format(cid=self.cid) + quote(heading)
         logger.info(f"Getting spectral information for CID {self.cid}")
@@ -426,6 +503,10 @@ class PubChem:
 
         Raises:
             ValueError: If the data could not be retrieved
+
+        Example:
+            >>> await self._format_ms_spectra(data)
+                {'Mass bank ID': 'MoNA ID', ...}
         """
         try:
             information = data["Information"]
@@ -483,6 +564,10 @@ class PubChem:
 
         Raises:
             ValueError: If the data could nt be retrieved
+
+        Example:
+            >>> await self._format_nmr_spectra(data)
+                {'1': {'instrument': 'Bruker', 'frequency': '400 MHz',...}}
         """
         try:
             information = data["Information"]
@@ -530,6 +615,10 @@ class PubChem:
 
         Raises:
             ValueError: If the data could not be retrieved
+
+        Example:
+            >>> await self._get_c_nmr_spectra()
+                {'1': {'instrument': 'Bruker', 'frequency': '400 MHz',...}}
         """
         try:
             data = await self._format_long_url("13C NMR Spectra")
@@ -546,6 +635,10 @@ class PubChem:
 
         Raises:
             ValueError: If the data could not be retrieved
+
+        Example:
+            >>> await self._get_h_nmr_spectra()
+                {'1': {'instrument': 'Bruker', 'frequency': '400 MHz',...}}
         """
         try:
             data = await self._format_long_url("1H NMR Spectra")
@@ -562,6 +655,10 @@ class PubChem:
 
         Raises:
             ValueError: If the data could not be retrieved
+
+        Example:
+            >>> await self._get_uv_spectra()
+                'Reference 1:\nMAX ABSORPTION: 210 nm\nReference 2:\nUV MAX: 210 nm'
         """
         data = await self._format_long_url("UV Spectra")
         results = {}
@@ -602,6 +699,10 @@ class PubChem:
 
         Raises:
             ValueError: If the data could not be retrieved
+
+        Example:
+            >>> await self._get_ms_spectra()
+                {'Mass bank ID': 'MoNA ID', ...}
         """
         try:
             data = await self._format_long_url("Mass Spectrometry")
@@ -629,6 +730,10 @@ class PubChem:
 
         Raises:
             ValueError: If the data could not be retrieved
+
+        Example:
+            >>> await self._get_ghs_classification()
+                {'H225': ['Highly flammable liquid and vapour'], ...}
         """
         data = await self._format_long_url("GHS%20Classification")
         logger.info(f"Getting GHS classification for CID {self.cid}")
@@ -661,6 +766,10 @@ class PubChem:
 
         Raises:
             ValueError: If the data could not be retrieved
+
+        Example:
+            >>> await self._get_patent_count()
+                10
         """
         url = [
             "/compound/cid/",
@@ -677,7 +786,7 @@ class PubChem:
         logger.info(f"Number of patents for CID {self.cid}: {data}")
         return data
 
-    async def return_physical_property(self):
+    async def _return_physical_property(self):
         """
         Get the physical properties for a compound from PubChem.
 
@@ -686,6 +795,10 @@ class PubChem:
 
         Raises:
             ValueError: If the data could not be retrieved
+
+        Example:
+            >>> await self.return_physical_property()
+                {'Experimental Properties': ['Appearance: clear colorless liquid', 'Boiling Point: 78.37...']}
         """
         data = await self._format_long_url("Experimental%20Properties")
         results = {}

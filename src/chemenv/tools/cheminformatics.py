@@ -35,7 +35,7 @@ def get_tanimoto_similarity(s1: str, s2: str) -> float:
 
     Example:
         >>> get_tanimoto_similarity("CCO", "CC")
-        0.143
+            0.143
     """
     try:
         mol1 = Chem.MolFromSmiles(s1)
@@ -62,10 +62,10 @@ def get_number_of_topologically_distinct_atoms(smiles: str, atomic_number: int =
 
     Example:
         >>> get_number_of_topologically_distinct_atoms("CCO", 1)
-        3
+            3
 
         >>> get_number_of_topologically_distinct_atoms("CCO", 6)
-        2
+            2
     """
     try:
         molecule = Chem.MolFromSmiles(smiles)
@@ -112,7 +112,7 @@ def get_element_info(identifier: str) -> dict:
 
     Example:
         >>> get_element_info("H")["name"]
-        'Hydrogen'
+            'Hydrogen'
     """
     try:
         # Try to get the element
@@ -155,7 +155,7 @@ def _get_number_atoms(smiles: str) -> int:
 
     Example:
         >>> _get_number_atoms("CCO")
-        3
+            3
     """
     try:
         mol = Chem.MolFromSmiles(smiles)
@@ -181,7 +181,7 @@ def _get_number_heavy_atoms(smiles: str) -> int:
 
     Example:
         >>> _get_number_heavy_atoms("CCO")
-        3
+            3
     """
     try:
         mol = Chem.MolFromSmiles(smiles)
@@ -207,7 +207,7 @@ def _get_canonical_smiles(smiles: str) -> str:
 
     Example:
         >>> _canonical_smiles("CCO")
-        'CCO'
+            'CCO'
     """
     try:
         mol = Chem.MolFromSmiles(smiles)
@@ -233,7 +233,7 @@ def _get_compound_charge(smiles: str) -> int:
 
     Example:
         >>> _get_compound_charge("CCO")
-        0
+            0
     """
     try:
         mol = Chem.MolFromSmiles(smiles)
@@ -259,7 +259,7 @@ def _get_number_rings(smiles: str) -> int:
 
     Example:
         >>> _get_number_aromatic_rings("c1ccccc1")
-        1
+            1
     """
     try:
         mol = Chem.MolFromSmiles(smiles)
@@ -286,7 +286,7 @@ def _get_ring_sizes(smiles: str) -> list:
 
     Example:
         >>> _get_ring_sizes("C1CCCCC1")
-        [6]
+            [6]
     """
     try:
         mol = Chem.MolFromSmiles(smiles)
@@ -313,7 +313,7 @@ def _get_number_aromatic_rings(smiles: str) -> int:
 
     Example:
         >>> _get_number_aromatic_rings("c1ccccc1")
-        1
+            1
     """
     try:
         mol = Chem.MolFromSmiles(smiles)
@@ -346,7 +346,7 @@ def _get_aromatic_rings(smiles: str) -> list:
 
     Example:
         >>> _get_aromatic_rings("c1ccccc1")
-        [[0, 1, 2, 3, 4, 5]]
+            [[0, 1, 2, 3, 4, 5]]
     """
     try:
         mol = Chem.MolFromSmiles(smiles)
@@ -377,7 +377,7 @@ def _get_chiral_centers(smiles: str) -> int:
 
     Example:
         >>> _get_chiral_centers("CCO")
-        0
+            0
     """
     try:
         mol = Chem.MolFromSmiles(smiles)
@@ -404,7 +404,7 @@ def _get_number_chiral_centers(smiles: str) -> int:
 
     Example:
         >>> _get_number_chiral_centers("CCO")
-        0
+            0
     """
     try:
         mol = Chem.MolFromSmiles(smiles)
@@ -431,7 +431,7 @@ def _get_number_cis_bonds(smiles: str) -> int:
 
     Example:
         >>> _get_number_cis_bonds("C/C=C/C")
-        1
+            1
     """
     try:
         mol = Chem.MolFromSmiles(smiles)
@@ -464,7 +464,7 @@ def _get_number_trans_bonds(smiles: str) -> int:
 
     Example:
         >>> _get_number_trans_bonds("C/C=C/C")
-        1
+            1
     """
     try:
         mol = Chem.MolFromSmiles(smiles)
@@ -496,7 +496,7 @@ def _get_molecular_properties(smiles: str) -> dict:
 
     Example:
         >>> _get_molecular_properties("CCO")
-        {'logp': 0.22399999999999998, 'tpsa': 20.23, 'molecular_weight': 46.069, 'rotatable_bonds': 1, 'hbd': 1, 'hba': 1}
+            {'logp': 0.22399999999999998, 'tpsa': 20.23, 'molecular_weight': 46.069, 'rotatable_bonds': 1, 'hbd': 1, 'hba': 1}
     """
     try:
         mol = Chem.MolFromSmiles(smiles)
@@ -529,7 +529,7 @@ def _has_substructure(smiles: str, substructure_smarts: str) -> bool:
 
     Example:
         >>> _has_substructure("CCO", "CO")
-        True
+            True
     """
     try:
         mol = Chem.MolFromSmiles(smiles)
@@ -556,7 +556,7 @@ def _get_substructure_count(smiles: str, substructure_smarts: str) -> int:
 
     Example:
         >>> _get_substructure_count("CCO", "C")
-        2
+            2
     """
     try:
         mol = Chem.MolFromSmiles(smiles)
@@ -580,6 +580,10 @@ def _pka_from_smiles(smiles: str) -> float:
 
     Raises:
         ValueError: If the SMILES string is invalid.
+
+    Example:
+        >>> _pka_from_smiles("CCO")
+            16.0
     """
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:

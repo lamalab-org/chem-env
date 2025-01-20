@@ -21,6 +21,10 @@ def _is_patented(smiles: str) -> bool:
 
     Raises:
         ValueError: If an error occurs while checking if the molecule is patented
+
+    Examples:
+        >>> _is_patented("CCO")
+            False
     """
     logger.debug(f"Checking if {smiles} is patented")
     try:
@@ -42,6 +46,13 @@ def _is_buyable(smiles: str) -> bool:
 
     Returns:
         str: "Buyable" if the molecule is buyable, "Not buyable" otherwise
+
+    Raises:
+        ValueError: If an error occurs while checking if the molecule is buyable
+
+    Examples:
+        >>> _is_buyable("CCO")
+            True
     """
     logger.debug(f"Checking if {smiles} is buyable")
     try:

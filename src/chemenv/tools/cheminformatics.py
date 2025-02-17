@@ -161,6 +161,7 @@ def _get_number_atoms(smiles: str) -> int:
         mol = Chem.MolFromSmiles(smiles)
         if mol is None:
             raise ValueError("Invalid SMILES string")
+        mol = Chem.AddHs(mol)
         return mol.GetNumAtoms()
     except Exception as e:
         raise ValueError(f"Invalid SMILES string: {e}")

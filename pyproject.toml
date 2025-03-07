@@ -10,7 +10,7 @@ license = {file = "LICENSE"}
 readme = "README.md"
 requires-python = ">=3.9"
 dynamic = ["version"]
-dependencies = ["modal", "rdkit", "mendeleev", "fire"]
+dependencies = ["modal", "fire"]
 
 [project.optional-dependencies]
 dev = ["pytest", "pre-commit", "ruff", "pytest-asyncio"]

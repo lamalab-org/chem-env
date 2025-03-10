@@ -1,12 +1,32 @@
 from modal import Image
 
-is_patented_image = Image.debian_slim(python_version=3.12).pip_install(
+is_patented_image = Image.debian_slim(python_version="3.12").pip_install(
     ["molbloom", "loguru"]
+)
+
+exomol_image = Image.debian_slim(python_version="3.12").pip_install(
+    ["exomol", "loguru"]
 )
 
 with is_patented_image.imports():
     import molbloom
     from loguru import logger
+
+with exomol_image.imports():
+    import exmol
+
+
+def _get_functional_groups(smiles: str) -> list[str]:
+    """
+    Get the functional groups of a molecule using Exomol
+
+    Args:
+        smiles (str): SMILES string of the molecule
+
+    Returns:
+        list[str]: List of functional groups of the molecule
+    """
+    return exmol.get_functional_groups(mol=smiles, return_all=True, cutoff=500)
 
 
 def _is_patented(smiles: str) -> bool:

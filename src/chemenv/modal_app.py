@@ -23,6 +23,8 @@ from chemenv.tools.cheminformatics import (
     _pka_from_smiles,
 )
 from chemenv.tools.util_tool import (
+    exomol_image,
+    _get_functional_groups,
     is_patented_image,
     _is_patented,
     _is_buyable,
@@ -44,6 +46,13 @@ from chemenv.tools.converters import (
     _selfies_to_smiles,
     _inchi_to_smiles,
     _deepsmiles_to_smiles,
+)
+from chemenv.tools.rxn_utils import (
+    rxn_mapper_image,
+    _get_rxn_mapper_confidence,
+    rxn_utils_image,
+    _unify_rxn_smiles,
+    _canonicalize_rxn_smiles,
 )
 import os
 
@@ -461,6 +470,27 @@ def get_element_info(*args, **kwargs):
             'Hydrogen'
     """
     return _get_element_info(*args, **kwargs)
+
+
+@app.function(image=exomol_image)
+def get_functional_groups(*args, **kwargs):
+    """
+    Get the functional groups of a molecule using Exomol
+
+    Args:
+        smiles (str): SMILES string of the molecule
+
+    Returns:
+        list[str]: List of functional groups of the molecule
+
+    Raises:
+        ValueError: If an error occurs while getting the functional groups
+
+    Example:
+        >>> _get_functional_groups("CCO")
+            ['Alcohol']
+    """
+    return _get_functional_groups(*args, **kwargs)
 
 
 @app.function(image=is_patented_image)
@@ -1099,3 +1129,45 @@ def deepsmiles_to_smiles(deepsmiles: str) -> str:
         return _deepsmiles_to_smiles(deepsmiles)
     except Exception as e:
         raise ValueError(f"Error converting DeepSMILES to SMILES: {e}") from e
+
+
+@app.function(image=rxn_mapper_image)
+def get_rxn_mapping(rxns: list[str]) -> list[dict]:
+    """
+    Get the atom mapping of a reaction using RxnMapper.
+
+    Args:
+        rxns (list[str]): List of reaction strings
+
+    Returns:
+        list[dict]: List of atom mapping dictionaries
+    """
+    return _get_rxn_mapper_confidence(rxns)
+
+
+@app.function(image=rxn_utils_image)
+def unify_rxn_smiles(*args, **kwargs):
+    """
+    Unify reaction SMILES strings.
+
+    Args:
+        rxn_smiles (str): The reaction SMILES string to unify.
+
+    Returns:
+        str: The unified reaction SMILES string.
+    """
+    return _unify_rxn_smiles(*args, **kwargs)
+
+
+@app.function(image=rxn_utils_image)
+def canonicalize_rxn_smiles(*args, **kwargs):
+    """
+    Canonicalize reaction SMILES strings.
+
+    Args:
+        rxn_smiles (str): The reaction SMILES string to canonicalize.
+
+    Returns:
+        str: The canonicalized reaction SMILES string.
+    """
+    return _canonicalize_rxn_smiles(*args, **kwargs)

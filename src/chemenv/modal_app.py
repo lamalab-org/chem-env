@@ -1,4 +1,5 @@
-from modal import App
+import os
+from modal import App, Volume
 from chemenv.tools.cheminformatics import (
     rdkit_image,
     mendeleev_image,
@@ -54,11 +55,22 @@ from chemenv.tools.rxn_utils import (
     _unify_rxn_smiles,
     _canonicalize_rxn_smiles,
 )
-import os
+from chemenv.tools.rxn_schema_processing import (
+    decimer_image,
+    _decimer_extractor,
+    rxnscribe_image,
+    _rxnscribe_extractor,
+)
 
+MINUTES = 60  # 60 seconds
 chemenv_name = os.getenv("CHEMENV_NAME", "")
 if chemenv_name and not chemenv_name.startswith("-"):
     chemenv_name = f"-{chemenv_name}"
+
+
+# Define the volumes to safe checkpoints and the images
+hf_cache_vol = Volume.from_name("huggingface-cache", create_if_missing=True)
+images_vol = Volume.from_name("images", create_if_missing=True)
 
 
 # Create the app
@@ -1141,6 +1153,11 @@ def get_rxn_mapping(rxns: list[str]) -> list[dict]:
 
     Returns:
         list[dict]: List of atom mapping dictionaries
+
+    Examples:
+    >>> _get_rxn_mapper_confidence("CC(C)S.CN(C)C=O.Fc1cccnc1F.O=C([O-])[O-].[K+].[K+]>>CC(C)Sc1ncccc1F")
+        [{'mapped_rxn': 'CN(C)C=O.F[c:5]1[n:6][cH:7][cH:8][cH:9]...',
+        'confidence': 0.9565619900376546}]
     """
     return _get_rxn_mapper_confidence(rxns)
 
@@ -1155,6 +1172,10 @@ def unify_rxn_smiles(*args, **kwargs):
 
     Returns:
         str: The unified reaction SMILES string.
+
+    Examples:
+    >>> _unify_rxn_smiles("CC.O.[Na+]~[Cl-]>>CCO")
+        "CC.O.[Na+].[Cl-]>>CCO"
     """
     return _unify_rxn_smiles(*args, **kwargs)
 
@@ -1169,5 +1190,51 @@ def canonicalize_rxn_smiles(*args, **kwargs):
 
     Returns:
         str: The canonicalized reaction SMILES string.
+
+    Examples:
+        >>> canonicalize_rxn_smiles("CO.O.C>>C(O) |f:1.2|")
+            "CO.C.O>>CO |f:1.2|"
     """
     return _canonicalize_rxn_smiles(*args, **kwargs)
+
+
+@app.function(image=decimer_image)
+def molecule_image_extraction(*args, **kwargs):
+    """
+    Predicts the SMILES from the image using DECIMER models.
+    https://github.com/Kohulan/DECIMER-Image_Transformer
+
+    Args:
+        image_name: str: Path to the image file.
+
+    Returns:
+        str: SMILES predicted.
+
+    Example:
+        >>> decimer_prediction("image.png")
+        'CCO'
+    """
+    return _decimer_extractor(*args, **kwargs)
+
+
+@app.function(
+    image=rxnscribe_image,
+    gpu="A10G",
+    scaledown_window=15 * MINUTES,
+    volumes={
+        "/root/.cache/huggingface": hf_cache_vol,
+        "/data/images": images_vol,
+    },
+)
+def rxn_schema_extraction(*args, **kwargs):
+    """
+    Extracts the reaction scheme from the image using RxnScribe model.
+    https://github.com/thomas0809/RxnScribe
+
+    Args:
+        image_name: str: Path to the image file.
+
+    Returns:
+        list[dict]: List of dictionaries containing the reaction schema.
+    """
+    return _rxnscribe_extractor(*args, **kwargs)

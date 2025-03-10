@@ -32,8 +32,9 @@ def _get_rxn_mapper_confidence(rxns: list[str]) -> list[dict]:
         float: Confidence of the reaction
 
     Examples:
-        >>> _get_rxn_mapper_confidence("CCO>>CC")
-            0.95
+        >>> _get_rxn_mapper_confidence("CC(C)S.CN(C)C=O.Fc1cccnc1F.O=C([O-])[O-].[K+].[K+]>>CC(C)Sc1ncccc1F")
+            [{'mapped_rxn': 'CN(C)C=O.F[c:5]1[n:6][cH:7][cH:8][cH:9]...',
+            'confidence': 0.9565619900376546}]
     """
     rxn_mapper = RXNMapper()
     return rxn_mapper.get_attention_guided_atom_maps(rxns)
@@ -50,8 +51,8 @@ def _unify_rxn_smiles(rxn_smiles: str) -> str:
         str: Unified SMILES of the reaction
 
     Examples:
-        >>> _unify_rxn_smiles("CCO>>CC")
-            "CCO>>CC"
+        >>> _unify_rxn_smiles("CC.O.[Na+]~[Cl-]>>CCO")
+            "CC.O.[Na+].[Cl-]>>CCO"
     """
     return to_reaction_smiles(
         parse_any_reaction_smiles(rxn_smiles), ReactionFormat.STANDARD
@@ -69,7 +70,7 @@ def _canonicalize_rxn_smiles(rxn_smiles: str) -> str:
         str: Canonicalized SMILES of the reaction
 
     Examples:
-        >>> canonicalize_rxn_smiles("CCO>>CC")
-            "CCO>>CC"
+        >>> canonicalize_rxn_smiles("CO.O.C>>C(O) |f:1.2|")
+            "CO.C.O>>CO |f:1.2|"
     """
     return canonicalize_any(rxn_smiles)

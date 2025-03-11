@@ -32,9 +32,11 @@ rxnscribe_image = (
 
 with rxnscribe_image.imports():
     import os
+    from typing import Any
     import torch
     from rxnscribe import RxnScribe
     from huggingface_hub import hf_hub_download
+    from molscribe import MolScribe
 
 
 def _decimer_extractor(image_name: str) -> str:
@@ -53,6 +55,32 @@ def _decimer_extractor(image_name: str) -> str:
         'CCO'
     """
     return decimer.predict_SMILES(f"/data/images/{image_name}")
+
+
+def _molscribe_extractor(image_name: str) -> dict[str, Any]:
+    """
+    Predicts the molecule from the image using MolScribe model.
+
+    Args:
+        image_name: str: Name of the image file.
+
+    Returns:
+        dict: Dictionary containing the predicted molecule.
+    """
+    image_path = f"/data/images/{image_name}"
+    ckpt_path = hf_hub_download("yujieq/MolScribe", "swin_base_char_aux_1m.pth")
+    model = MolScribe(ckpt_path, device=torch.device("cpu"))
+    output = model.predict_image_file(
+        "assets/example.png", return_atoms_bonds=True, return_confidence=True
+    )
+
+    if "molfile" in output:
+        output.pop("molfile")
+
+    if os.path.exists(image_path):
+        os.remove(image_path)
+
+    return output
 
 
 def _rxnscribe_extractor(image_name: str) -> list[dict]:

@@ -1199,7 +1199,7 @@ def canonicalize_rxn_smiles(*args, **kwargs):
 
 
 @app.function(image=decimer_image)
-def molecule_image_extraction(*args, **kwargs):
+def molecule_image_extraction_decimer(*args, **kwargs):
     """
     Predicts the SMILES from the image using DECIMER models.
     https://github.com/Kohulan/DECIMER-Image_Transformer
@@ -1215,6 +1215,29 @@ def molecule_image_extraction(*args, **kwargs):
         'CCO'
     """
     return _decimer_extractor(*args, **kwargs)
+
+
+@app.function(
+    image=rxnscribe_image,
+    gpu="A10G",
+    scaledown_window=15 * MINUTES,
+    volumes={
+        "/root/.cache/huggingface": hf_cache_vol,
+        "/data/images": images_vol,
+    },
+)
+def molecule_image_extraction_molscribe(*args, **kwargs):
+    """
+    Extracts the reaction scheme from the image using MolScribe model.
+    https://github.com/thomas0809/MolScribe
+
+    Args:
+        image_name: str: Path to the image file.
+
+    Returns:
+        dict: Dictionary containing the extracted molecule.
+    """
+    return _rxnscribe_extractor(*args, **kwargs)
 
 
 @app.function(

@@ -1,8 +1,8 @@
 from modal import Image
 
 
-rxn_mapper_image = Image.debian_slim(python_version="3.6").pip_install(
-    ["rdkit", "rxn_mapper"]
+rxn_mapper_image = Image.debian_slim(python_version="3.9").pip_install(
+    ["rdkit", "rxnmapper"]
 )
 
 with rxn_mapper_image.imports():

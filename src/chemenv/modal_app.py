@@ -1,5 +1,5 @@
 import os
-from modal import App, Volume
+from modal import App
 from chemenv.tools.cheminformatics import (
     rdkit_image,
     mendeleev_image,
@@ -55,22 +55,10 @@ from chemenv.tools.rxn_utils import (
     _unify_rxn_smiles,
     _canonicalize_rxn_smiles,
 )
-from chemenv.tools.rxn_schema_processing import (
-    decimer_image,
-    _decimer_extractor,
-    rxnscribe_image,
-    _rxnscribe_extractor,
-)
 
-MINUTES = 60  # 60 seconds
 chemenv_name = os.getenv("CHEMENV_NAME", "")
 if chemenv_name and not chemenv_name.startswith("-"):
     chemenv_name = f"-{chemenv_name}"
-
-
-# Define the volumes to safe checkpoints and the images
-hf_cache_vol = Volume.from_name("huggingface-cache", create_if_missing=True)
-images_vol = Volume.from_name("images", create_if_missing=True)
 
 
 # Create the app
@@ -1196,68 +1184,3 @@ def canonicalize_rxn_smiles(*args, **kwargs):
             "CO.C.O>>CO |f:1.2|"
     """
     return _canonicalize_rxn_smiles(*args, **kwargs)
-
-
-@app.function(image=decimer_image)
-def molecule_image_extraction_decimer(*args, **kwargs):
-    """
-    Predicts the SMILES from the image using DECIMER models.
-    https://github.com/Kohulan/DECIMER-Image_Transformer
-
-    Args:
-        image_name: str: Path to the image file.
-
-    Returns:
-        str: SMILES predicted.
-
-    Example:
-        >>> decimer_prediction("image.png")
-        'CCO'
-    """
-    return _decimer_extractor(*args, **kwargs)
-
-
-@app.function(
-    image=rxnscribe_image,
-    gpu="A10G",
-    scaledown_window=15 * MINUTES,
-    volumes={
-        "/root/.cache/huggingface": hf_cache_vol,
-        "/data/images": images_vol,
-    },
-)
-def molecule_image_extraction_molscribe(*args, **kwargs):
-    """
-    Extracts the reaction scheme from the image using MolScribe model.
-    https://github.com/thomas0809/MolScribe
-
-    Args:
-        image_name: str: Path to the image file.
-
-    Returns:
-        dict: Dictionary containing the extracted molecule.
-    """
-    return _rxnscribe_extractor(*args, **kwargs)
-
-
-@app.function(
-    image=rxnscribe_image,
-    gpu="A10G",
-    scaledown_window=15 * MINUTES,
-    volumes={
-        "/root/.cache/huggingface": hf_cache_vol,
-        "/data/images": images_vol,
-    },
-)
-def rxn_schema_extraction(*args, **kwargs):
-    """
-    Extracts the reaction scheme from the image using RxnScribe model.
-    https://github.com/thomas0809/RxnScribe
-
-    Args:
-        image_name: str: Path to the image file.
-
-    Returns:
-        list[dict]: List of dictionaries containing the reaction schema.
-    """
-    return _rxnscribe_extractor(*args, **kwargs)

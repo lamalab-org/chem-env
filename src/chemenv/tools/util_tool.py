@@ -4,9 +4,7 @@ is_patented_image = Image.debian_slim(python_version="3.12").pip_install(
     ["molbloom", "loguru"]
 )
 
-exomol_image = Image.debian_slim(python_version="3.12").pip_install(
-    ["exomol", "loguru"]
-)
+exomol_image = Image.debian_slim().pip_install(["exmol", "loguru"])
 
 with is_patented_image.imports():
     import molbloom
@@ -14,6 +12,7 @@ with is_patented_image.imports():
 
 with exomol_image.imports():
     import exmol
+    from loguru import logger
 
 
 def _get_functional_groups(smiles: str) -> list[str]:

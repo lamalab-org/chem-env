@@ -37,6 +37,9 @@ class PubChem:
         self.cid = None
         self.base_url = "https://pubchem.ncbi.nlm.nih.gov/rest/pug"
         self.long_url = "https://pubchem.ncbi.nlm.nih.gov/rest/pug_view/data/compound/{cid}/JSON/?response_type=display&heading="
+        self.complete_url = (
+            "https://pubchem.ncbi.nlm.nih.gov/rest/pug_view/data/compound/{cid}/JSON/"
+        )
         logger.info(f"Initialized PubChem handler for CID {self.cid}")
 
     @classmethod
@@ -167,6 +170,15 @@ class PubChem:
             int: PubChem CID of the compound.
         """
         return self.cid
+
+    async def _get_pubchem_full_record(self) -> dict:
+        """
+        Get the full PubChem record for a compound.
+
+        Returns:
+            dict: Full PubChem record for the compound.
+        """
+        return await self.get_data_from_url(self.complete_url.format(cid=self.cid))
 
     async def _get_number_atoms(self) -> Optional[int]:
         """

@@ -612,6 +612,24 @@ def is_buyable(*args, **kwargs):
 
 
 @app.function(image=_pubchem_image)
+async def get_pubchem_full_record(*args, **kwargs) -> dict:
+    """
+    Get the full PubChem record for a compound
+
+    Args:
+        compound (str): Any type of compound identifier (CID, SMILES, InChI, etc.)
+
+    Returns:
+        dict: Full PubChem record for the compound
+
+    Raises:
+        ValueError: If no record is found
+    """
+    pubchem = await PubChem.create(*args, **kwargs)
+    return await pubchem._get_pubchem_full_record() if pubchem.cid else None
+
+
+@app.function(image=_pubchem_image)
 async def get_number_atoms_pubchem(*args, **kwargs) -> int:
     """
     Get the number of atoms in a compound using RDKit.

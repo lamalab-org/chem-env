@@ -63,6 +63,11 @@ from chemenv.tools.rxn_utils import (
     _unify_rxn_smiles,
     _canonicalize_rxn_smiles,
 )
+from chemenv.tools.spectra_simulation import (
+    spectra_simulation_image,
+    SpectraAPI,
+)
+
 
 MINUTES = 60  # 60 seconds
 
@@ -1278,3 +1283,21 @@ def canonicalize_rxn_smiles(*args, **kwargs):
             "CO.C.O>>CO |f:1.2|"
     """
     return _canonicalize_rxn_smiles(*args, **kwargs)
+
+
+@app.function(image=spectra_simulation_image)
+def simulate_spectra(*args, **kwargs):
+    """
+    Simulate 1H NMR, 13C NMR, and IR spectra for a given molecule using its SMILES string.
+    If some of the spectra are not available, the function will return None for those spectra.
+
+    Args:
+        smiles (str): The SMILES string of the molecule.
+
+    Returns:
+        dict[str,str]: Simulated spectra data.
+
+    Raises:
+        ValueError: If the simulation fails.
+    """
+    return SpectraAPI.get_all_predictions(*args, **kwargs)

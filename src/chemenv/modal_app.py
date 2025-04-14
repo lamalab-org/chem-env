@@ -30,6 +30,7 @@ from chemenv.tools.cheminformatics import (
     _has_substructure,
     _get_substructure_count,
     _pka_from_smiles,
+    _get_molecular_formula,
 )
 from chemenv.tools.util_tool import (
     exomol_image,
@@ -531,6 +532,27 @@ def pka_from_smiles(*args, **kwargs):
     return _pka_from_smiles(*args, **kwargs)
 
 
+@app.function(image=rdkit_image)
+def get_molecular_formula(*args, **kwargs):
+    """
+    Get the molecular formula of a molecule given its SMILES string.
+
+    Args:
+        smiles (str): The SMILES string of the molecule.
+
+    Returns:
+        str: The molecular formula of the molecule.
+
+    Raises:
+        ValueError: If the SMILES string is invalid.
+
+    Example:
+        >>> _get_molecular_formula("CCO")
+            'C2H6O'
+    """
+    return _get_molecular_formula(*args, **kwargs)
+
+
 @app.function(image=mendeleev_image)
 def get_element_info(*args, **kwargs):
     """
@@ -810,16 +832,18 @@ async def get_number_isomers_pubchem(compound: str) -> int:
 
 
 @app.function(image=_pubchem_image, timeout=86399)
-async def get_compound_isomers_pubchem(*args, **kwargs):
+async def get_compound_isomers_pubchem(compound: str, limit: int = 10) -> list:
     """
     Get the compound isomers for a compound from PubChem.
     This function can take some time depending on the number of isomers.
+    Returns a maximum of 10 isomers by default.
 
     Args:
         compound (str): Any type of compound identifier (CID, SMILES, InChI, etc.)
+        limit (int, optional): Maximum number of isomers to return. Defaults to 10.
 
     Returns:
-        list: List of compound isomers.
+        list: List of compound isomers (limited to the specified number).
 
     Raises:
         ValueError: If the isomers could not be retrieved
@@ -827,9 +851,42 @@ async def get_compound_isomers_pubchem(*args, **kwargs):
     Example:
         >>> await self._get_compound_isomers()
             ['CCO', 'COC']
+        >>> await self._get_compound_isomers(limit=5)
+            ['CCO', 'COC', 'CC[O-]', 'C[O-]C', 'C[CH-]O']
     """
-    pubchem = await PubChem.create(*args, **kwargs)
-    data = await pubchem._get_compound_isomers()
+    pubchem = await PubChem.create(compound)
+    data = await pubchem._get_compound_isomers(limit)
+    if data is None:
+        raise ValueError("No isomers found")
+    return data
+
+
+@app.function(image=_pubchem_image, timeout=86399)
+async def get_compound_isomers_pubchem_by_formula(
+    formula: str, limit: int = 10
+) -> list:
+    """
+    Get the compound isomers for a compound from PubChem.
+    This function can take some time depending on the number of isomers.
+    Returns a maximum of 10 isomers by default.
+
+    Args:
+        formulat(str): The empirical formula of the compound.
+        limit (int, optional): Maximum number of isomers to return. Defaults to 10.
+
+    Returns:
+        list: List of compound isomers (limited to the specified number).
+
+    Raises:
+        ValueError: If the isomers could not be retrieved
+
+    Example:
+        >>> await self._get_compound_isomers()
+            ['CCO', 'COC']
+        >>> await self._get_compound_isomers(limit=5)
+            ['CCO', 'COC', 'CC[O-]', 'C[O-]C', 'C[CH-]O']
+    """
+    data = await PubChem._get_compound_isomers_from_formula(formula, limit)
     if data is None:
         raise ValueError("No isomers found")
     return data

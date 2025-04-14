@@ -7,6 +7,7 @@ mendeleev_image = Image.debian_slim().pip_install("mendeleev")
 
 with rdkit_image.imports():
     from rdkit import Chem, DataStructs
+    from rdkit.Chem import rdMolDescriptors
     from rdkit.Chem import AllChem
     from rdkit.Chem import Crippen
     import numpy as np
@@ -590,3 +591,29 @@ def _pka_from_smiles(smiles: str) -> float:
     if mol is None:
         raise ValueError("Invalid SMILES string")
     return Crippen.MolLogP(mol)
+
+
+def _get_molecular_formula(smiles):
+    """
+    Convert a SMILES string to molecular formula.
+
+    Parameters:
+    smiles (str): The SMILES representation of the molecule
+
+    Returns:
+    str: The molecular formula (e.g., C6H6O)
+    """
+    try:
+        # Convert SMILES to RDKit molecule object
+        mol = Chem.MolFromSmiles(smiles)
+
+        if mol is None:
+            return "Invalid SMILES string"
+
+        # Get the molecular formula
+        formula = rdMolDescriptors.CalcMolFormula(mol)
+
+        return formula
+
+    except Exception as e:
+        return f"Error: {str(e)}"

@@ -4,7 +4,11 @@ is_patented_image = Image.debian_slim(python_version="3.12").pip_install(
     ["molbloom", "loguru"]
 )
 
-exomol_image = Image.debian_slim().pip_install(["exmol", "loguru"])
+exomol_image = (
+    Image.debian_slim()
+    .apt_install(["libxrender1", "libxext6"])
+    .pip_install(["exmol", "loguru"])
+)
 
 with is_patented_image.imports():
     import molbloom

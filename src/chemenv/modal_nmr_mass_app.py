@@ -53,14 +53,16 @@ class IsotopicDistributionInput(BaseModel):
 @fastapi_endpoint(method="POST")
 def predict_isotopic_distribution(body: IsotopicDistributionInput):
     from rdkit.Chem import MolFromSmiles
+    from rdkit.Chem.rdMolDescriptors import CalcMolFormula
 
     mol = MolFromSmiles(body.smiles)
-    formula = Chem.rdMolDescriptors.CalcMolFormula(mol)
+    formula = CalcMolFormula(mol)
+    print(f"Calculating isotopic distribution for formula: {formula}")
     js = textwrap.dedent(f"""
     const {{ IsotopicDistribution }} = require('isotopic-distribution');
 
-    const isotopicDistribution = new IsotopicDistribution({formula},{{ionization: {body.ionization}}});
-    console.log(JSON.stringify(result.getPeaks()));
+    const isotopicDistribution = new IsotopicDistribution("{formula}");
+    console.log(JSON.stringify(isotopicDistribution.getPeaks()));
     """)
     out = subprocess.check_output(
         ["node", "--input-type=module", "-e", js],

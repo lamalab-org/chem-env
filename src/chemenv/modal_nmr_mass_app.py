@@ -59,7 +59,8 @@ def predict_isotopic_distribution(body: IsotopicDistributionInput):
     formula = CalcMolFormula(mol)
     print(f"Calculating isotopic distribution for formula: {formula}")
     js = textwrap.dedent(f"""
-    const {{ IsotopicDistribution }} = require('isotopic-distribution');
+    import {{ IsotopicDistribution }} from "isotopic-distribution";
+
 
     const isotopicDistribution = new IsotopicDistribution("{formula}");
     console.log(JSON.stringify(isotopicDistribution.getPeaks()));

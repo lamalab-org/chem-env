@@ -50,3 +50,48 @@ def simulate_spectra(*args, **kwargs):
         ValueError: If the simulation fails.
     """
     return asyncio.run(SpectraAPI.get_all_predictions(*args, **kwargs))
+
+
+@spectra_app.function(image=spectra_simulation_image)
+def get_ir_prediction(*args, **kwargs):
+    """
+    Get IR spectrum prediction for a given molecule using its SMILES string.
+
+    Args:
+        smiles (str): The SMILES string of the molecule.
+        **kwargs: Additional arguments to pass to the prediction API.
+
+    Returns:
+        dict[str,str]: IR spectrum data.
+    """
+    return asyncio.run(SpectraAPI.get_ir_prediction(*args, **kwargs))
+
+
+@spectra_app.function(image=spectra_simulation_image)
+def get_c13_nmr_prediction(*args, **kwargs):
+    """
+    Get 13C NMR spectrum prediction for a given molecule using its SMILES string.
+
+    Args:
+        smiles (str): The SMILES string of the molecule.
+        **kwargs: Additional arguments to pass to the prediction API.
+
+    Returns:
+        dict[str,str]: 13C NMR spectrum data.
+    """
+    return asyncio.run(SpectraAPI.get_c13_nmr_prediction(*args, **kwargs))
+
+
+@spectra_app.function(image=spectra_simulation_image)
+def get_h_nmr_prediction(*args, **kwargs):
+    """
+    Get 1H NMR spectrum prediction for a given molecule using its SMILES string.
+
+    Args:
+        smiles (str): The SMILES string of the molecule.
+        **kwargs: Additional arguments to pass to the prediction API.
+
+    Returns:
+        dict[str,str]: 1H NMR spectrum data.
+    """
+    return asyncio.run(SpectraAPI.get_h_nmr_prediction(*args, **kwargs))

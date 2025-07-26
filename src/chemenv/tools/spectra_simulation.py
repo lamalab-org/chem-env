@@ -47,7 +47,7 @@ class SpectraAPI:
             [signal["delta"] for signal in json_response["data"]["signals"]],
             reverse=True,
         )
-        return f"deltas {', '.join(f'{shift:.2f}' for shift in shifts)}"
+        return f"Deltas: {', '.join(f'{shift:.2f}' for shift in shifts)}"
 
     @staticmethod
     def format_h_nmr(json_response: Dict) -> str:
@@ -111,7 +111,7 @@ class SpectraAPI:
             ],
             reverse=True,
         )
-        return f"{', '.join(map(str, wavenumbers))} cm-1"
+        return f"Wavenumbers (cm-1): {', '.join(map(str, wavenumbers))}"
 
     @staticmethod
     @backoff.on_exception(
@@ -233,3 +233,77 @@ class SpectraAPI:
                 predictions["ir"] = "IR prediction failed"
 
             return predictions
+
+    @classmethod
+    async def get_c13_nmr_prediction(cls, smiles: str) -> str:
+        """
+        Get only the C13 NMR spectral prediction for a molecule.
+
+        Args:
+            smiles: SMILES string of the molecule
+
+        Returns:
+            Formatted C13 NMR prediction or error message
+        """
+        async with aiohttp.ClientSession() as session:
+            try:
+                result = await cls.get_prediction_async(
+                    session, smiles, "nmr", "carbon"
+                )
+                return SpectraAPI.format_c13_nmr(result)
+            except Exception as e:
+                logger.error(f"Failed to retrieve C13 NMR: {str(e)}")
+                return "C13 NMR prediction failed"
+
+    @classmethod
+    async def get_h_nmr_prediction(cls, smiles: str) -> str:
+        """
+        Get only the H NMR spectral prediction for a molecule.
+
+        Args:
+            smiles: SMILES string of the molecule
+
+        Returns:
+            Formatted H NMR prediction or error message
+        """
+        async with aiohttp.ClientSession() as session:
+            try:
+                result = await cls.get_prediction_async(
+                    session, smiles, "nmr", "proton"
+                )
+                return SpectraAPI.format_h_nmr(result)
+            except Exception as e:
+                logger.error(f"Failed to retrieve H NMR: {str(e)}")
+                return "H NMR prediction failed"
+
+    @classmethod
+    async def get_ir_prediction(cls, smiles: str) -> str:
+        """
+        Get only the IR spectral prediction for a molecule.
+
+        Args:
+            smiles: SMILES string of the molecule
+
+        Returns:
+            Formatted IR prediction or error message
+        """
+        async with aiohttp.ClientSession() as session:
+            try:
+                result = await cls.get_prediction_async(session, smiles, "ir")
+                return SpectraAPI.format_ir(result)
+            except Exception as e:
+                logger.error(f"Failed to retrieve IR: {str(e)}")
+                return "IR prediction failed"
+
+
+if __name__ == "__main__":
+    import asyncio
+
+    async def main():
+        smiles = "CCO"  # Example SMILES for ethanol
+        predictions = await SpectraAPI.get_ir_prediction(smiles)
+        predictions = await SpectraAPI.get_c13_nmr_prediction(smiles)
+        print("H NMR Prediction:")
+        print(predictions)
+
+    asyncio.run(main())

@@ -1,5 +1,13 @@
 from modal import Image
 from typing import Optional, List, Dict, Any
+import backoff
+import aiohttp
+import asyncio
+import pubchempy as pcp
+from rdkit import Chem
+from urllib.parse import quote
+from time import sleep
+from loguru import logger
 
 
 pubchem_image = Image.debian_slim(python_version="3.12").pip_install(
@@ -37,6 +45,9 @@ class PubChem:
         self.cid = None
         self.base_url = "https://pubchem.ncbi.nlm.nih.gov/rest/pug"
         self.long_url = "https://pubchem.ncbi.nlm.nih.gov/rest/pug_view/data/compound/{cid}/JSON/?response_type=display&heading="
+        self.complete_url = (
+            "https://pubchem.ncbi.nlm.nih.gov/rest/pug_view/data/compound/{cid}/JSON/"
+        )
         logger.info(f"Initialized PubChem handler for CID {self.cid}")
 
     @classmethod
@@ -168,6 +179,15 @@ class PubChem:
         """
         return self.cid
 
+    async def _get_pubchem_full_record(self) -> dict:
+        """
+        Get the full PubChem record for a compound.
+
+        Returns:
+            dict: Full PubChem record for the compound.
+        """
+        return await self.get_data_from_url(self.complete_url.format(cid=self.cid))
+
     async def _get_number_atoms(self) -> Optional[int]:
         """
         Get the number of atoms in a compound using RDKit.
@@ -211,7 +231,7 @@ class PubChem:
         try:
             data = (await self.get_compound_data(url))["PropertyTable"]["Properties"][
                 0
-            ]["IsomericSMILES"]
+            ]["SMILES"]
         except Exception as e:
             logger.error(f"Failed to extract Isomeric SMILES: {str(e)}")
             raise ValueError(f"Failed to extract Isomeric SMILES: {str(e)}")
@@ -240,7 +260,7 @@ class PubChem:
         try:
             data = (await self.get_compound_data(url))["PropertyTable"]["Properties"][
                 0
-            ]["CanonicalSMILES"]
+            ]["ConnectivitySMILES"]
         except Exception as e:
             logger.error(f"Failed to extract Canonical SMILES: {str(e)}")
             raise ValueError(f"Failed to extract Canonical SMILES: {str(e)}")
@@ -363,13 +383,18 @@ class PubChem:
         logger.info(f"Number of compound isomers for CID {self.cid}: {data}")
         return data
 
-    async def _get_compound_isomers(self) -> List[str]:
+    async def _get_compound_isomers(self, limit: int = 10) -> List[str]:
         """
         Get the compound isomers for a compound from PubChem.
         This function can take some time depending on the number of isomers.
+        Returns a maximum of 10 isomers by default.
+        Shuffles the results each time to provide different isomers.
+
+        Args:
+            limit (int, optional): Maximum number of isomers to return. Defaults to 10.
 
         Returns:
-            list: List of compound isomers.
+            list: List of compound isomers (limited to the specified number).
 
         Raises:
             ValueError: If the isomers could not be retrieved
@@ -377,16 +402,24 @@ class PubChem:
         Example:
             >>> await self._get_compound_isomers()
                 ['CCO', 'COC']
+            >>> await self._get_compound_isomers(limit=5)
+                ['COC', 'CCO', 'CC[O-]', 'C[CH-]O', 'C[O-]C']
         """
+        import random
+
         url = [
             "/compound/fastformula/",
             "/cids/JSON",
         ]
-        logger.info(f"Getting compound isomers for CID {self.cid}")
+        logger.info(f"Getting compound isomers for CID {self.cid} (limit: {limit})")
         formula = await self._get_compound_formula()
         url = self.base_url + url[0] + quote(str(formula)) + url[1]
         try:
             isomers_cids = (await self.get_data_from_url(url))["IdentifierList"]["CID"]
+            # Shuffle the isomers to get different ones each time
+            random.shuffle(isomers_cids)
+            # Limit the number of isomers to process
+            isomers_cids = isomers_cids[:limit]
             data = []
             for i in isomers_cids:
                 sleep(0.5)
@@ -405,7 +438,64 @@ class PubChem:
         except Exception as e:
             logger.error(f"No compound isomers found. {e}")
             raise ValueError(f"No compound isomers found. {e}")
-        logger.info(f"Compound isomers for CID {self.cid}: {data}")
+        logger.info(f"Found {len(data)} compound isomers for the given formula")
+        return data
+
+    @classmethod
+    async def _get_compound_isomers_from_formula(
+        cls, formula: str, limit: int = 10
+    ) -> List[str]:
+        """
+        Get the compound isomers for a compound from PubChem from a given formula.
+        This function can take some time depending on the number of isomers.
+        Returns a maximum of 10 isomers by default.
+        Shuffles the results each time to provide different isomers.
+
+        Args:
+            formula (str): The empirical formula of the compound.
+            limit (int, optional): Maximum number of isomers to return. Defaults to 10.
+
+        Returns:
+            list: List of compound isomers (limited to the specified number).
+
+        Raises:
+            ValueError: If the isomers could not be retrieved
+        """
+        instance = cls()
+        url = [
+            "/compound/fastformula/",
+            "/cids/JSON",
+        ]
+        import random
+
+        url = instance.base_url + url[0] + quote(str(formula)) + url[1]
+        try:
+            isomers_cids = (await instance.get_data_from_url(url))["IdentifierList"][
+                "CID"
+            ]
+            # Shuffle the isomers to get different ones each time
+            random.shuffle(isomers_cids)
+            # Limit the number of isomers to process
+            isomers_cids = isomers_cids[:limit]
+            data = []
+            for i in isomers_cids:
+                sleep(0.5)
+                instance.cid = i
+                try:
+                    # Isomeric SMILES to capture enantiomers
+                    smiles = await instance._get_isomeric_smiles()
+                    if smiles:
+                        data.append(smiles)
+                except ValueError as ve:
+                    logger.warning(f"Could not get SMILES for CID {i}: {ve}")
+                    continue
+                except Exception as e:
+                    logger.error(f"Unexpected error getting SMILES for CID {i}: {e}")
+                    continue
+        except Exception as e:
+            logger.error(f"No compound isomers found. {e}")
+            raise ValueError(f"No compound isomers found. {e}")
+        logger.info(f"Found {len(data)} compound isomers for the given formula")
         return data
 
     async def _get_number_heavy_atoms(self) -> Optional[int]:

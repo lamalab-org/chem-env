@@ -1,5 +1,13 @@
 from modal import Image
 from typing import Optional, List, Dict, Any
+import backoff
+import aiohttp
+import asyncio
+import pubchempy as pcp
+from rdkit import Chem
+from urllib.parse import quote
+from time import sleep
+from loguru import logger
 
 
 pubchem_image = Image.debian_slim(python_version="3.12").pip_install(
@@ -223,7 +231,7 @@ class PubChem:
         try:
             data = (await self.get_compound_data(url))["PropertyTable"]["Properties"][
                 0
-            ]["IsomericSMILES"]
+            ]["SMILES"]
         except Exception as e:
             logger.error(f"Failed to extract Isomeric SMILES: {str(e)}")
             raise ValueError(f"Failed to extract Isomeric SMILES: {str(e)}")
@@ -252,7 +260,7 @@ class PubChem:
         try:
             data = (await self.get_compound_data(url))["PropertyTable"]["Properties"][
                 0
-            ]["CanonicalSMILES"]
+            ]["ConnectivitySMILES"]
         except Exception as e:
             logger.error(f"Failed to extract Canonical SMILES: {str(e)}")
             raise ValueError(f"Failed to extract Canonical SMILES: {str(e)}")

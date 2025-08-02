@@ -207,7 +207,7 @@ async def get_number_isomers_pubchem(compound: str) -> int:
 
 
 @pubchem_app.function(image=_pubchem_image, timeout=86399)
-async def get_compound_isomers_pubchem(compound: str, limit: int = 10) -> list:
+async def get_compound_isomers_pubchem(compound: str) -> list:
     """
     Get the compound isomers for a compound from PubChem.
     This function can take some time depending on the number of isomers.
@@ -215,7 +215,6 @@ async def get_compound_isomers_pubchem(compound: str, limit: int = 10) -> list:
 
     Args:
         compound (str): Any type of compound identifier (CID, SMILES, InChI, etc.)
-        limit (int, optional): Maximum number of isomers to return. Defaults to 10.
 
     Returns:
         list: List of compound isomers (limited to the specified number).
@@ -230,7 +229,7 @@ async def get_compound_isomers_pubchem(compound: str, limit: int = 10) -> list:
             ['CCO', 'COC', 'CC[O-]', 'C[O-]C', 'C[CH-]O']
     """
     pubchem = await PubChem.create(compound)
-    data = await pubchem._get_compound_isomers(limit)
+    data = await pubchem._get_compound_isomers()
     if data is None:
         raise ValueError("No isomers found")
     return data

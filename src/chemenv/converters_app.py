@@ -1,5 +1,6 @@
 import os
-from modal import App
+from modal import App, fastapi_endpoint
+from pydantic import BaseModel
 from chemenv.tools.converters import (
     _converters_image,
     _safe_image,
@@ -15,6 +16,12 @@ from chemenv.tools.converters import (
     _deepsmiles_to_smiles,
 )
 
+
+class IupacNameInput(BaseModel):
+    smiles: str
+    timeout: int = 60
+
+
 converters_name = os.getenv("CONVERTERS_NAME", "")
 if converters_name and not converters_name.startswith("-"):
     converters_name = f"-{converters_name}"
@@ -23,8 +30,9 @@ if converters_name and not converters_name.startswith("-"):
 converters_app = App(f"chemenv_converters{converters_name}")
 
 
-@converters_app.function(image=_converters_image)
-async def get_iupac_name(smiles: str, timeout: int = 10) -> str:
+@converters_app.function(image=_converters_image, timeout=60)
+@fastapi_endpoint(method="POST")
+async def get_iupac_name(body: IupacNameInput) -> str:
     """
     Get the IUPAC name of a molecule from its SMILES string.
 
@@ -38,7 +46,7 @@ async def get_iupac_name(smiles: str, timeout: int = 10) -> str:
     Raises:
         ValueError: If the conversion fails.
     """
-    converter = _Smiles2Name(smiles, timeout)
+    converter = _Smiles2Name(body.smiles, body.timeout)
     try:
         name = await converter.get_name()
         return name

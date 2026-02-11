@@ -22,6 +22,11 @@ class IupacNameInput(BaseModel):
     timeout: int = 60
 
 
+class NameInput(BaseModel):
+    name: str
+    timeout: int = 10
+
+
 converters_name = os.getenv("CONVERTERS_NAME", "")
 if converters_name and not converters_name.startswith("-"):
     converters_name = f"-{converters_name}"
@@ -55,7 +60,8 @@ async def get_iupac_name(body: IupacNameInput) -> str:
 
 
 @converters_app.function(image=_converters_image)
-async def get_smiles_from_name(name: str, timeout: int = 10) -> str:
+@fastapi_endpoint(method="POST")
+async def get_smiles_from_name(body: NameInput) -> str:
     """
     Get the SMILES string of a molecule from its IUPAC name.
 
@@ -69,7 +75,7 @@ async def get_smiles_from_name(name: str, timeout: int = 10) -> str:
     Raises:
         ValueError: If the conversion fails.
     """
-    converter = _Name2Smiles(name, timeout)
+    converter = _Name2Smiles(body.name, body.timeout)
     try:
         smiles = await converter.get_smiles()
         return smiles

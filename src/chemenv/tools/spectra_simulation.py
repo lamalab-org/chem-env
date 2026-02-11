@@ -29,9 +29,9 @@ class SpectraAPI:
     VALID_SPECTRUM_TYPES = {"carbon", "proton"}
 
     _request_lock = asyncio.Lock()
-    _last_request_time = 0
+    _last_request_time: float = 0
     _min_request_interval = 1
-    _timeout = 10
+    _timeout = 120
 
     @staticmethod
     def format_c13_nmr(json_response: Dict) -> str:
@@ -60,6 +60,7 @@ class SpectraAPI:
             str: Formatted 1H NMR prediction
         """
         formatted_signals = []
+        print(json_response)
 
         for range_data in json_response["data"]["ranges"]:
             signal = range_data["signals"][0]
@@ -118,12 +119,11 @@ class SpectraAPI:
         backoff.expo,
         (aiohttp.ClientError, asyncio.TimeoutError),
         max_tries=1,
-        max_time=10,
+        max_time=60,
         giveup=lambda e: isinstance(e, aiohttp.ClientResponseError)
         and e.status in {400, 401, 403, 404},
         jitter=backoff.full_jitter,
         base=2,
-        logger=logger,
     )
     async def get_prediction_async(
         session: aiohttp.ClientSession,
@@ -175,7 +175,7 @@ class SpectraAPI:
             url,
             headers={"Content-Type": "application/json"},
             json=payload,
-            timeout=SpectraAPI._timeout,
+            timeout=aiohttp.ClientTimeout(total=SpectraAPI._timeout),
         ) as response:
             try:
                 response.raise_for_status()
@@ -212,22 +212,22 @@ class SpectraAPI:
             predictions = {}
 
             # Process carbon NMR result
-            if not isinstance(results[0], Exception):
-                predictions["c13_nmr"] = SpectraAPI.format_c13_nmr(results[0])
+            if not isinstance(results[0], BaseException):
+                predictions["c13_nmr"] = SpectraAPI.format_c13_nmr(dict(results[0]))
             else:
                 logger.error(f"Failed to retrieve C13 NMR: {str(results[0])}")
                 predictions["c13_nmr"] = "C13 NMR prediction failed"
 
             # Process proton NMR result
-            if not isinstance(results[1], Exception):
-                predictions["h_nmr"] = SpectraAPI.format_h_nmr(results[1])
+            if not isinstance(results[1], BaseException):
+                predictions["h_nmr"] = SpectraAPI.format_h_nmr(dict(results[1]))
             else:
                 logger.error(f"Failed to retrieve H NMR: {str(results[1])}")
                 predictions["h_nmr"] = "H NMR prediction failed"
 
             # Process IR result
-            if not isinstance(results[2], Exception):
-                predictions["ir"] = SpectraAPI.format_ir(results[2])
+            if not isinstance(results[2], BaseException):
+                predictions["ir"] = SpectraAPI.format_ir(dict(results[2]))
             else:
                 logger.error(f"Failed to retrieve IR: {str(results[2])}")
                 predictions["ir"] = "IR prediction failed"
@@ -295,15 +295,44 @@ class SpectraAPI:
                 logger.error(f"Failed to retrieve IR: {str(e)}")
                 return "IR prediction failed"
 
+    @classmethod
+    async def get_raw_h_nmr_prediction(cls, smiles: str) -> Dict | str:
+        """
+        Get the raw H NMR spectral prediction for a molecule.
 
-if __name__ == "__main__":
-    import asyncio
+        Args:
+            smiles: SMILES string of the molecule
 
-    async def main():
-        smiles = "CCO"  # Example SMILES for ethanol
-        predictions = await SpectraAPI.get_ir_prediction(smiles)
-        predictions = await SpectraAPI.get_c13_nmr_prediction(smiles)
-        print("H NMR Prediction:")
-        print(predictions)
+        Returns:
+            Raw H NMR prediction or error message
+        """
+        async with aiohttp.ClientSession() as session:
+            try:
+                result = await cls.get_prediction_async(
+                    session, smiles, "nmr", "proton"
+                )
+                return result
+            except Exception as e:
+                logger.error(f"Failed to retrieve raw H NMR: {str(e)}")
+                return "Raw H NMR prediction failed"
 
-    asyncio.run(main())
+    @classmethod
+    async def get_raw_c_nmr_prediction(cls, smiles: str) -> Dict | str:
+        """
+        Get the raw C NMR spectral prediction for a molecule.
+
+        Args:
+            smiles: SMILES string of the molecule
+
+        Returns:
+            Raw H NMR prediction or error message
+        """
+        async with aiohttp.ClientSession() as session:
+            try:
+                result = await cls.get_prediction_async(
+                    session, smiles, "nmr", "carbon"
+                )
+                return result
+            except Exception as e:
+                logger.error(f"Failed to retrieve raw H NMR: {str(e)}")
+                return "Raw H NMR prediction failed"

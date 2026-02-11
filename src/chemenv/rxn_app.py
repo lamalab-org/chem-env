@@ -1,6 +1,7 @@
 import os
-from modal import App, Volume
+from modal import App, Volume, fastapi_endpoint
 from typing import Any
+from pydantic import BaseModel
 from chemenv.tools.rxn_schema_processing import (
     decimer_image,
     _decimer_extractor,
@@ -17,6 +18,11 @@ from chemenv.tools.rxn_utils import (
 )
 
 MINUTES = 60  # 60 seconds
+
+
+class RxnsInput(BaseModel):
+    rxns: list[str]
+
 
 rxn_name = os.getenv("RXNENV_NAME", "")
 if rxn_name and not rxn_name.startswith("-"):
@@ -87,7 +93,8 @@ def rxn_schema_extraction(*args, **kwargs) -> list[dict]:
 
 
 @rxn_app.function(image=rxn_mapper_image)
-def get_rxn_mapping(rxns: list[str]) -> list[dict]:
+@fastapi_endpoint(method="POST")
+def get_rxn_mapping(body: RxnsInput) -> list[dict]:
     """
     Get the atom mapping of a reaction using RxnMapper.
 
@@ -102,7 +109,7 @@ def get_rxn_mapping(rxns: list[str]) -> list[dict]:
         [{'mapped_rxn': 'CN(C)C=O.F[c:5]1[n:6][cH:7][cH:8][cH:9]...',
         'confidence': 0.9565619900376546}]
     """
-    return _get_rxn_mapper_confidence(rxns)
+    return _get_rxn_mapper_confidence(body.rxns)
 
 
 @rxn_app.function(image=rxn_utils_image)

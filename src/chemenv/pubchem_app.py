@@ -59,20 +59,20 @@ async def get_number_atoms_pubchem(*args, **kwargs) -> int:
 @pubchem_app.function(image=_pubchem_image)
 async def get_isomeric_smiles_pubchem(*args, **kwargs) -> str:
     """
-    Get the isomeric SMILES for a compound from PubChem.
+        Get the isomeric SMILES for a compound from PubChem.
 
-    Args:
-        compound (str): Any type of compound identifier (CID, SMILES, InChI, etc.)
+        Args:
+            compound (str): Any type of compound identifier (CID, SMILES, InChI, etc.)
 
-    Returns:
-        str: Isomeric SMILES of the compound.
+        Returns:
+    tr: Isomeric SMILES of the compound.
 
-    Raises:
-        ValueError: If the isomeric SMILES could not be retrieved
+        Raises:
+            ValueError: If the isomeric SMILES could not be retrieved
 
-    Example:
-        >>> await self._get_isomeric_smiles()
-            'CCO'
+        Example:
+            >>> await self._get_isomeric_smiles()
+                'CCO'
     """
     pubchem = await PubChem.create(*args, **kwargs)
     isomeric_smiles = await pubchem._get_isomeric_smiles()
@@ -207,15 +207,15 @@ async def get_number_isomers_pubchem(compound: str) -> int:
 
 
 @pubchem_app.function(image=_pubchem_image, timeout=86399)
-async def get_compound_isomers_pubchem(compound: str, limit: int = 10) -> list:
+async def get_compound_isomers_pubchem(compound: str, limit: int = 5) -> list:
     """
     Get the compound isomers for a compound from PubChem.
     This function can take some time depending on the number of isomers.
-    Returns a maximum of 10 isomers by default.
+    Returns a maximum of 5 isomers by default.
 
     Args:
         compound (str): Any type of compound identifier (CID, SMILES, InChI, etc.)
-        limit (int, optional): Maximum number of isomers to return. Defaults to 10.
+        limit (int, optional): Maximum number of isomers to return. Defaults to 5.
 
     Returns:
         list: List of compound isomers (limited to the specified number).
@@ -237,17 +237,15 @@ async def get_compound_isomers_pubchem(compound: str, limit: int = 10) -> list:
 
 
 @pubchem_app.function(image=_pubchem_image, timeout=86399)
-async def get_compound_isomers_pubchem_by_formula(
-    formula: str, limit: int = 10
-) -> list:
+async def get_compound_isomers_pubchem_by_formula(formula: str, limit: int = 0) -> list:
     """
     Get the compound isomers for a compound from PubChem.
     This function can take some time depending on the number of isomers.
-    Returns a maximum of 10 isomers by default.
+    Returns all isomers by default.
 
     Args:
-        formulat(str): The empirical formula of the compound.
-        limit (int, optional): Maximum number of isomers to return. Defaults to 10.
+        formula (str): The empirical formula of the compound.
+        limit (int, optional): Maximum number of isomers to return. Defaults to 0, meaning no limit.
 
     Returns:
         list: List of compound isomers (limited to the specified number).
@@ -490,3 +488,28 @@ async def return_physical_property(*args, **kwargs):
     if physical_property is None:
         raise ValueError("No physical property found")
     return physical_property
+
+
+@pubchem_app.function(image=_pubchem_image)
+async def return_cas_number(*args, **kwargs):
+    """
+    Get the CAS number of a compound from PubChem.
+
+    Args:
+        compound (str): Any type of compound identifier (CID, SMILES, InChI, etc.)
+
+    Returns:
+        str: CAS number
+
+    Raises:
+        ValueError: If the data could not be retrieved
+
+    Example:
+        >>> await self.return_cas_number()
+            '64-17-5'
+    """
+    pubchem = await PubChem.create(*args, **kwargs)
+    cas_number = await pubchem._return_cas_number()
+    if cas_number is None:
+        raise ValueError("No CAS number found")
+    return cas_number

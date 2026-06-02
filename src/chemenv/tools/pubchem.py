@@ -1,5 +1,13 @@
 from modal import Image
 from typing import Optional, List, Dict, Any
+import backoff
+import aiohttp
+import asyncio
+import pubchempy as pcp
+from rdkit import Chem
+from urllib.parse import quote
+from time import sleep
+from loguru import logger
 
 
 pubchem_image = Image.debian_slim(python_version="3.12").pip_install(
@@ -37,6 +45,9 @@ class PubChem:
         self.cid = None
         self.base_url = "https://pubchem.ncbi.nlm.nih.gov/rest/pug"
         self.long_url = "https://pubchem.ncbi.nlm.nih.gov/rest/pug_view/data/compound/{cid}/JSON/?response_type=display&heading="
+        self.complete_url = (
+            "https://pubchem.ncbi.nlm.nih.gov/rest/pug_view/data/compound/{cid}/JSON/"
+        )
         logger.info(f"Initialized PubChem handler for CID {self.cid}")
 
     @classmethod
@@ -96,7 +107,7 @@ class PubChem:
         backoff.expo,
         (aiohttp.ClientError, asyncio.TimeoutError),
         max_tries=10,
-        max_time=30,
+        max_time=60,
     )
     async def get_data_from_url(
         self, record_url: Optional[str] = None
@@ -112,7 +123,7 @@ class PubChem:
         """
         if not record_url:
             raise ValueError("No record URL provided.")
-        timeout = aiohttp.ClientTimeout(total=10)
+        timeout = aiohttp.ClientTimeout(total=60)
         async with aiohttp.ClientSession(timeout=timeout) as session:
             try:
                 async with session.get(record_url) as record_response:
@@ -126,7 +137,7 @@ class PubChem:
         backoff.expo,
         (aiohttp.ClientError, asyncio.TimeoutError),
         max_tries=10,
-        max_time=30,
+        max_time=120,
     )
     async def get_compound_data(
         self, record_url: Optional[str] = None
@@ -147,7 +158,7 @@ class PubChem:
             if record_url
             else None
         )
-        timeout = aiohttp.ClientTimeout(total=10)
+        timeout = aiohttp.ClientTimeout(total=60)
 
         async with aiohttp.ClientSession(timeout=timeout) as session:
             try:
@@ -167,6 +178,15 @@ class PubChem:
             int: PubChem CID of the compound.
         """
         return self.cid
+
+    async def _get_pubchem_full_record(self) -> dict:
+        """
+        Get the full PubChem record for a compound.
+
+        Returns:
+            dict: Full PubChem record for the compound.
+        """
+        return await self.get_data_from_url(self.complete_url.format(cid=self.cid))
 
     async def _get_number_atoms(self) -> Optional[int]:
         """
@@ -211,7 +231,7 @@ class PubChem:
         try:
             data = (await self.get_compound_data(url))["PropertyTable"]["Properties"][
                 0
-            ]["IsomericSMILES"]
+            ]["SMILES"]
         except Exception as e:
             logger.error(f"Failed to extract Isomeric SMILES: {str(e)}")
             raise ValueError(f"Failed to extract Isomeric SMILES: {str(e)}")
@@ -240,7 +260,7 @@ class PubChem:
         try:
             data = (await self.get_compound_data(url))["PropertyTable"]["Properties"][
                 0
-            ]["CanonicalSMILES"]
+            ]["ConnectivitySMILES"]
         except Exception as e:
             logger.error(f"Failed to extract Canonical SMILES: {str(e)}")
             raise ValueError(f"Failed to extract Canonical SMILES: {str(e)}")
@@ -363,13 +383,18 @@ class PubChem:
         logger.info(f"Number of compound isomers for CID {self.cid}: {data}")
         return data
 
-    async def _get_compound_isomers(self) -> List[str]:
+    async def _get_compound_isomers(self, limit: int = 5) -> List[str]:
         """
         Get the compound isomers for a compound from PubChem.
         This function can take some time depending on the number of isomers.
+        Returns a maximum of 5 isomers by default.
+        Shuffles the results each time to provide different isomers.
+
+        Args:
+            limit (int, optional): Maximum number of isomers to return. Defaults to 5.
 
         Returns:
-            list: List of compound isomers.
+            list: List of compound isomers (limited to the specified number).
 
         Raises:
             ValueError: If the isomers could not be retrieved
@@ -377,16 +402,24 @@ class PubChem:
         Example:
             >>> await self._get_compound_isomers()
                 ['CCO', 'COC']
+            >>> await self._get_compound_isomers(limit=5)
+                ['COC', 'CCO', 'CC[O-]', 'C[CH-]O', 'C[O-]C']
         """
+        import random
+
         url = [
             "/compound/fastformula/",
             "/cids/JSON",
         ]
-        logger.info(f"Getting compound isomers for CID {self.cid}")
+        logger.info(f"Getting compound isomers for CID {self.cid} (limit: {limit})")
         formula = await self._get_compound_formula()
         url = self.base_url + url[0] + quote(str(formula)) + url[1]
         try:
             isomers_cids = (await self.get_data_from_url(url))["IdentifierList"]["CID"]
+            # Shuffle the isomers to get different ones each time
+            random.shuffle(isomers_cids)
+            # Limit the number of isomers to process
+            isomers_cids = isomers_cids[:limit]
             data = []
             for i in isomers_cids:
                 sleep(0.5)
@@ -405,7 +438,65 @@ class PubChem:
         except Exception as e:
             logger.error(f"No compound isomers found. {e}")
             raise ValueError(f"No compound isomers found. {e}")
-        logger.info(f"Compound isomers for CID {self.cid}: {data}")
+        logger.info(f"Found {len(data)} compound isomers for the given formula")
+        return data
+
+    @classmethod
+    async def _get_compound_isomers_from_formula(
+        cls, formula: str, limit: int = 5
+    ) -> List[str]:
+        """
+        Get the compound isomers for a compound from PubChem from a given formula.
+        This function can take some time depending on the number of isomers.
+        Returns a maximum of 5 isomers by default.
+        Shuffles the results each time to provide different isomers.
+
+        Args:
+            formula (str): The empirical formula of the compound.
+            limit (int, optional): Maximum number of isomers to return. Defaults to 5.
+
+        Returns:
+            list: List of compound isomers (limited to the specified number).
+
+        Raises:
+            ValueError: If the isomers could not be retrieved
+        """
+        instance = cls()
+        url = [
+            "/compound/fastformula/",
+            "/cids/JSON",
+        ]
+        import random
+
+        url = instance.base_url + url[0] + quote(str(formula)) + url[1]
+        try:
+            isomers_cids = (await instance.get_data_from_url(url))["IdentifierList"][
+                "CID"
+            ]
+            # Shuffle the isomers to get different ones each time
+            random.shuffle(isomers_cids)
+            # Limit the number of isomers to process
+            if limit != 0:
+                isomers_cids = isomers_cids[:limit]
+            data = []
+            for i in isomers_cids:
+                sleep(0.5)
+                instance.cid = i
+                try:
+                    # Isomeric SMILES to capture enantiomers
+                    smiles = await instance._get_isomeric_smiles()
+                    if smiles:
+                        data.append(smiles)
+                except ValueError as ve:
+                    logger.warning(f"Could not get SMILES for CID {i}: {ve}")
+                    continue
+                except Exception as e:
+                    logger.error(f"Unexpected error getting SMILES for CID {i}: {e}")
+                    continue
+        except Exception as e:
+            logger.error(f"No compound isomers found. {e}")
+            raise ValueError(f"No compound isomers found. {e}")
+        logger.info(f"Found {len(data)} compound isomers for the given formula")
         return data
 
     async def _get_number_heavy_atoms(self) -> Optional[int]:
@@ -466,6 +557,86 @@ class PubChem:
         logger.info(f"Number of chiral atoms for CID {self.cid}: {data}")
         return data
 
+    @backoff.on_exception(
+        backoff.expo,
+        (aiohttp.ClientError, asyncio.TimeoutError),
+        max_tries=10,
+        max_time=30,
+    )
+    async def get_flexible_data_from_url(self, record_url: Optional[str] = None):
+        """
+        Fetch data from PubChem REST API using a specific URL, handling both JSON and text responses
+
+        Args:
+            record_url (str): URL to fetch compound data from
+
+        Returns:
+            Union[dict, str]: Compound data in JSON format (dict) or plain text (str)
+
+        Raises:
+            ValueError: If no URL is provided or if response status is not successful
+            aiohttp.ClientError: For HTTP-related errors
+            asyncio.TimeoutError: For timeout errors
+        """
+        if not record_url:
+            raise ValueError("No record URL provided.")
+
+        timeout = aiohttp.ClientTimeout(total=60)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            try:
+                async with session.get(record_url) as record_response:
+                    record_response.raise_for_status()
+
+                    # Get content type from response headers
+                    content_type = record_response.headers.get(
+                        "content-type", ""
+                    ).lower()
+
+                    # Handle JSON responses
+                    if "application/json" in content_type:
+                        try:
+                            record_data = await record_response.json()
+                            return record_data
+                        except aiohttp.ContentTypeError:
+                            # Fallback to text if JSON parsing fails
+                            text_data = await record_response.text()
+                            raise ValueError(
+                                f"Expected JSON but got malformed JSON. Content: {text_data[:200]}..."
+                            )
+
+                    # Handle text responses (including text/plain, text/html, etc.)
+                    elif "text/" in content_type:
+                        text_data = await record_response.text()
+
+                        # Try to parse as JSON even if content-type says text/plain
+                        # Sometimes APIs return JSON with incorrect content-type headers
+                        try:
+                            import json
+
+                            parsed_json = json.loads(text_data)
+                            return parsed_json
+                        except (json.JSONDecodeError, ValueError):
+                            # Return as plain text if it's not valid JSON
+                            return text_data
+
+                    # Handle other content types
+                    else:
+                        # Try JSON first as a fallback
+                        try:
+                            record_data = await record_response.json()
+                            return record_data
+                        except (aiohttp.ContentTypeError, json.JSONDecodeError):
+                            # If JSON fails, return as text
+                            text_data = await record_response.text()
+                            return text_data
+
+            except aiohttp.ClientResponseError as e:
+                raise ValueError(
+                    f"HTTP error {e.status}: {e.message} for URL: {record_url}"
+                )
+            except Exception as e:
+                raise ValueError(f"Failed to get data from URL: {str(e)}")
+
     async def _format_long_url(self, heading: str) -> Dict[str, Any]:
         """
         Format the long URL to get specific information from PubChem and return the data.
@@ -486,240 +657,10 @@ class PubChem:
         url = self.long_url.format(cid=self.cid) + quote(heading)
         logger.info(f"Getting spectral information for CID {self.cid}")
         try:
-            return await self.get_data_from_url(url)
+            return await self.get_flexible_data_from_url(url)
         except Exception as e:
             logger.error(f"Failed to get spectral information: {str(e)}")
             raise ValueError(f"Failed to get spectral information: {str(e)}")
-
-    async def _format_ms_spectra(self, data):
-        """
-        Format the MS spectra data retrieved from PubChem.
-
-        Args:
-            data (dict): Data retrieved from PubChem
-
-        Returns:
-            dict: Formatted MS spectra data
-
-        Raises:
-            ValueError: If the data could not be retrieved
-
-        Example:
-            >>> await self._format_ms_spectra(data)
-                {'Mass bank ID': 'MoNA ID', ...}
-        """
-        try:
-            information = data["Information"]
-        except KeyError:
-            raise ValueError("No MS spectra found")
-
-        field_mapping = {
-            "Mass bank ID": "MoNA ID",
-            "Spectra type": "MS Category",
-            "MS Type": "MS Type",
-            "MS Level": "MS Level",
-            "Instrument": "Instrument",
-            "Instrument Type": "Instrument Type",
-            "Ionization Mode": "Ionization Mode",
-            "Top Peaks": "StringWithMarkup",
-        }
-
-        results = {}
-
-        counter = 0
-        for info in information:
-            if counter > 5:
-                return results
-            ref_num = info.get("ReferenceNumber")
-            if not ref_num:
-                continue
-
-            value = info.get("Value", {})
-
-            for orig_key, mapped_key in field_mapping.items():
-                if mapped_key == "StringWithMarkup":
-                    string_with_markup = value.get("StringWithMarkup", [])
-                    peaks = [item["String"] for item in string_with_markup]
-                    results[orig_key] = peaks
-                else:
-                    string_with_markup = value.get("StringWithMarkup", [])
-                    if string_with_markup:
-                        results[orig_key] = string_with_markup[0]["String"]
-                    else:
-                        results[orig_key] = None
-
-            counter += 1
-
-        return results
-
-    async def _format_nmr_spectra(self, data):
-        """
-        Format the NMR spectra data retrieved from PubChem.
-
-        Args:
-            data (dict): Data retrieved from PubChem
-
-        Returns:
-            dict: Formatted NMR spectra data
-
-        Raises:
-            ValueError: If the data could nt be retrieved
-
-        Example:
-            >>> await self._format_nmr_spectra(data)
-                {'1': {'instrument': 'Bruker', 'frequency': '400 MHz',...}}
-        """
-        try:
-            information = data["Information"]
-        except KeyError:
-            raise ValueError("No 1H NMR spectra found")
-
-        # Define field mapping
-        field_mapping = {
-            "Instrument Type": "instrument",
-            "Frequency": "frequency",
-            "Solvent": "solvent",
-            "pH": "ph",
-            "Shifts [ppm]:Intensity": "shifts",
-        }
-
-        results = {}
-
-        for info in information:
-            ref_num = info.get("ReferenceNumber")
-            if not ref_num:
-                continue
-
-            name = info.get("Name")
-            string_value = (
-                info.get("Value", {}).get("StringWithMarkup", [{}])[0].get("String")
-            )
-
-            if not (name and string_value):
-                continue
-
-            if ref_num not in results:
-                results[ref_num] = {}
-
-            if name in field_mapping:
-                results[ref_num][field_mapping[name]] = string_value
-
-        return results
-
-    async def _get_c_nmr_spectra(self) -> Dict[str, Any]:
-        """
-        Get the C-NMR spectra for a compound from PubChem.
-
-        Returns:
-            dict: C-NMR spectra data
-
-        Raises:
-            ValueError: If the data could not be retrieved
-
-        Example:
-            >>> await self._get_c_nmr_spectra()
-                {'1': {'instrument': 'Bruker', 'frequency': '400 MHz',...}}
-        """
-        try:
-            data = await self._format_long_url("13C NMR Spectra")
-            return self._format_nmr_spectra(data)
-        except Exception:
-            raise ValueError("No C-NMR spectra found. {e}")
-
-    async def _get_h_nmr_spectra(self) -> Dict[str, Any]:
-        """
-        Get the 1H NMR spectra for a compound from PubChem.
-
-        Returns:
-            dict: 1H NMR spectra data
-
-        Raises:
-            ValueError: If the data could not be retrieved
-
-        Example:
-            >>> await self._get_h_nmr_spectra()
-                {'1': {'instrument': 'Bruker', 'frequency': '400 MHz',...}}
-        """
-        try:
-            data = await self._format_long_url("1H NMR Spectra")
-            return self._format_nmr_spectra(data)
-        except Exception:
-            raise ValueError("No 1H NMR spectra found. {e}")
-
-    async def _get_uv_spectra(self) -> str:
-        """
-        Get the UV spectra for a compound from PubChem.
-
-        Returns:
-            str: UV spectra data
-
-        Raises:
-            ValueError: If the data could not be retrieved
-
-        Example:
-            >>> await self._get_uv_spectra()
-                'Reference 1:\nMAX ABSORPTION: 210 nm\nReference 2:\nUV MAX: 210 nm'
-        """
-        data = await self._format_long_url("UV Spectra")
-        results = {}
-        try:
-            for info in data["Information"]:
-                ref_num = info["ReferenceNumber"]
-                string_value = info["Value"]["StringWithMarkup"][0]["String"]
-
-                if ref_num not in results:
-                    results[ref_num] = ""
-
-                if (
-                    "MAX ABSORPTION" in string_value.upper()
-                    or "UV MAX" in string_value.upper()
-                ):
-                    if results[ref_num]:
-                        results[ref_num] += "\n"
-                    results[ref_num] += string_value
-
-            if not results:
-                raise ValueError("No UV spectra found")
-
-            output = []
-            for ref_num, value in sorted(results.items()):
-                output.append(f"Reference {ref_num}:\n{value}")
-
-            return "\n\n".join(output)
-
-        except Exception:
-            raise ValueError("No UV spectra found")
-
-    async def _get_ms_spectra(self) -> Dict[str, Any]:
-        """
-        Get the MS spectra for a compound from PubChem.
-
-        Returns:
-            dict: MS spectra data
-
-        Raises:
-            ValueError: If the data could not be retrieved
-
-        Example:
-            >>> await self._get_ms_spectra()
-                {'Mass bank ID': 'MoNA ID', ...}
-        """
-        try:
-            data = await self._format_long_url("Mass Spectrometry")
-            results = {}
-            for section in data["Record"]["Section"]:
-                title = section["TOCHeading"]
-                spectra = self._format_ms_spectra(section)
-                if spectra:
-                    results[title] = spectra
-
-            if not results:
-                raise ValueError("No MS spectra found")
-
-            return results
-
-        except Exception:
-            raise ValueError("No MS spectra found")
 
     async def _get_ghs_classification(self) -> Dict[str, List[str]]:
         """
@@ -735,7 +676,7 @@ class PubChem:
             >>> await self._get_ghs_classification()
                 {'H225': ['Highly flammable liquid and vapour'], ...}
         """
-        data = await self._format_long_url("GHS%20Classification")
+        data = await self._format_long_url("GHS Classification")
         logger.info(f"Getting GHS classification for CID {self.cid}")
         try:
             information_list = data["Record"]["Section"][0]["Section"][0]["Section"][0][
@@ -800,14 +741,41 @@ class PubChem:
             >>> await self.return_physical_property()
                 {'Experimental Properties': ['Appearance: clear colorless liquid', 'Boiling Point: 78.37...']}
         """
-        data = await self._format_long_url("Experimental%20Properties")
+        data = await self._format_long_url("Experimental Properties")
         results = {}
         for section in data["Record"]["Section"]:
             heading = section["TOCHeading"]
 
             results[heading] = []
+            print(data)
             for info in data["Information"]:
                 for string_markup in info["Value"]["StringWithMarkup"]:
                     results[heading].append(string_markup["String"])
 
         return results
+
+    async def _return_cas_number(self) -> str:
+        """
+        Get the CAS number for a compound from PubChem.
+
+        Returns:
+            str: CAS number of the compound.
+        """
+        data = await self._format_long_url("CAS")
+        try:
+            return data["Record"]["Section"][0]["Section"][0]["Section"][0][
+                "Information"
+            ][0]["Value"]["StringWithMarkup"][0]["String"]
+        except Exception:
+            logger.error("Failed to get CAS number")
+            raise ValueError("Failed to get CAS number")
+
+
+if __name__ == "__main__":
+    import asyncio
+
+    async def main():
+        pubchem = await PubChem.create("50-78-2")
+        print(await pubchem._get_isomeric_smiles())
+
+    asyncio.run(main())
